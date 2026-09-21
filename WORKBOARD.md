@@ -1,7 +1,7 @@
 # Shared multi-chat work board
 
 Canonical source: `armtekcomputer-ops/easyeda-ipad`, branch `main`, path `WORKBOARD.md`.
-Updated: 2026-09-21T15:22:00Z. All timestamps use UTC ISO 8601.
+Updated: 2026-09-21T15:25:00Z. All timestamps use UTC ISO 8601.
 This file tracks ownership and unfinished work; `HANDOFF.md` tracks verified product state and decisions.
 
 ## Required workflow
@@ -32,6 +32,7 @@ Use `blocked`, `paused`, or `needs_reconciliation` when appropriate. An expired 
 | chat-20260921T141500Z-agent3-ops001 | Agent 3 — PC companion deployment/runbook | OPS-001 | done | 2026-09-21T14:31:00Z | PR #11 merged as `a33f2d9ec66e993c69d1d1288bb579f83248a15b` | No further OPS-001 work |
 | chat-20260921T145300Z-agent3-recon008 | Agent 3 — PR #8 reconciliation reviewer | RECON-008 | done | 2026-09-21T14:57:00Z | review `5268152134` | Findings resolved by CORE-008 |
 | chat-20260921T150300Z-agent3-core008 | Agent 3 — CORE-008 takeover | CORE-008 | done | 2026-09-21T15:22:00Z | PR #8 merged as `45f3c607c274e8ccfa93e5687db489d57db1c31a` | Reservation released; residual reliability/testing/UX work can now be claimed |
+| chat-20260921T152500Z-agent3-rel005 | Agent 3 — transport reliability | REL-005 | in_progress | 2026-09-21T15:25:00Z | `work/REL-005/chat-20260921T152500Z-agent3-rel005` | Implement R5 handshake/pong/reconnect recovery and R6 bounded generation-safe pending relay tracking; add focused tests and CI |
 | unknown-pr5 | Existing PR author/chat not yet registered | EDIT-005 | needs_reconciliation | observed 2026-09-21T13:57:50Z | `feat/primitive-transform`; head observed `4180c2f98191fed082927255d57f6372d4b9425b`; PR #5 | Reconcile only after explicit editing-scope review |
 
 ## Tasks
@@ -41,9 +42,9 @@ Use `blocked`, `paused`, or `needs_reconciliation` when appropriate. An expired 
 | COORD-001 | P1 | Shared coordination protocol | done | chat-20260921-coordination-142684dc | Delivered on main |
 | CORE-008 | P1 | Trusted-state hardening, PC companion migration, Phase 7 read-only component inspector | done | chat-20260921T150300Z-agent3-core008 | PR #8 merged as `45f3c607c274e8ccfa93e5687db489d57db1c31a`; final pre-merge head `6269d83f4612ac0e00061ea3db1c1f304ef23b10`; exact-head CI `35618277426` success |
 | RECON-008 | P1 | Read-only reconciliation/review of PR #8 | done | chat-20260921T145300Z-agent3-recon008 | Completed before CORE-008 takeover |
-| REL-005 | P2 | R5 connection deadlines/recovery/status + R6 bounded pending requests | todo | unassigned | Now unblocked by CORE-008 merge. Claim residual reliability paths before editing. |
+| REL-005 | P2 | R5 connection deadlines/recovery/status + R6 bounded pending requests | in_progress | chat-20260921T152500Z-agent3-rel005 | Scope reserved after CORE-008 merge. Implement browser gateway handshake timeout/pong watchdog/bounded reconnect and companion pending request TTL/max-in-flight/generation-safe cleanup, with focused reliability tests. |
 | BUILD-008 | P2 | Deterministic npm install/CI lockfile | review | chat-20260921T135900Z-agent1-build008 | PR #10 head `fb8712a9e222f465d086d5e9d87f14a6188b6427`; CI `35610185239` success; merge requires explicit authorization |
-| TEST-008 | P2 | Transport behavior tests for auth/routing/disconnect/malformed/payload bounds | todo | unassigned | Now unblocked; coordinate with REL-005 so tests target the stabilized protocol |
+| TEST-008 | P2 | Transport behavior tests for auth/routing/disconnect/malformed/payload bounds | todo | unassigned | Keep broader protocol behavior suite separate; REL-005 may add only focused regression tests required for its reliability changes. |
 | UX-007 | P2 | Clearly mark preview and disable/hide unimplemented tools | todo | unassigned | Now unblocked; `src/App.tsx` CORE-008 reservation released |
 | LIVE-001 | P1 | Actual iPad + live EasyEDA end-to-end validation | todo | unassigned | Integrated main candidate now exists; requires real iPad, EasyEDA Pro, API Gateway, Worker/DO deployment and recorded versions/results |
 | VIEW-001 | P2 | Documented read-only real-board viewer feasibility research | claimed | chat-20260921T141000Z-agent2-view001 | PR #9; documentation/research only |
@@ -56,9 +57,10 @@ Use `blocked`, `paused`, or `needs_reconciliation` when appropriate. An expired 
 | --- | --- | --- | --- | --- |
 | BUILD-008 | chat-20260921T135900Z-agent1-build008 | `package.json`; `package-lock.json`; `.github/workflows/ci.yml` | retained through review | Integrate or explicitly abandon, synchronize HANDOFF/board, then release |
 | VIEW-001 | chat-20260921T141000Z-agent2-view001 | `docs/research/real-board-viewer.md` | retained while active | Research reaches review/done or explicit handoff |
+| REL-005 | chat-20260921T152500Z-agent3-rel005 | `src/lib/gateway.ts`; `src/lib/gateway.test.ts`; `companion/cloud-agent.mjs`; `companion/relay-pending.mjs`; `companion/relay-pending.test.mjs` | active | PR reaches review/merge or explicit handoff; then synchronize board and release |
 | EDIT-005 | unknown-pr5 | Existing PR #5 transform diff | reconciliation hold | Review diff and resolve overlap before write/integration |
 
-CORE-008 reservation is released as of 2026-09-21T15:22:00Z after PR #8 merge and HANDOFF synchronization. Previously reserved paths are available for newly claimed work: `companion/cloud-agent.mjs`, `companion/server.mjs`, `public/sw.js`, `src/App.tsx`, `src/lib/easyeda-pcb-component.ts`, `src/lib/easyeda-pcb-component.test.ts`, `src/lib/easyeda-safe-selection.ts`, `src/lib/easyeda-safe-selection.test.ts`, `src/lib/gateway.ts`, and `worker/index.ts`.
+CORE-008 reservation is released as of 2026-09-21T15:22:00Z after PR #8 merge and HANDOFF synchronization. Previously reserved paths are available for newly claimed work except those now reserved by REL-005.
 
 OPS-001 reservation for `docs/DEPLOYMENT_PC_COMPANION.md` remains released.
 
@@ -75,6 +77,16 @@ OPS-001 reservation for `docs/DEPLOYMENT_PC_COMPANION.md` remains released.
 - live tested: no; CI is not live iPad/EasyEDA validation
 - reservation released: yes
 - residual work: REL-005, TEST-008, UX-007, LIVE-001
+
+## Checkpoint — REL-005
+
+- task/chat: REL-005 / `chat-20260921T152500Z-agent3-rel005`
+- state: in_progress
+- branch: `work/REL-005/chat-20260921T152500Z-agent3-rel005`
+- scope: R5 browser gateway connection deadline/pong watchdog/bounded reconnect/status recovery; R6 PC companion pending relay TTL/max-in-flight/generation-safe cleanup
+- focused tests allowed only for REL-005 regressions; broader transport suite stays TEST-008
+- live tested: no
+- next: implement reserved paths, run CI, open PR, then move task to review if green
 
 ## Checkpoint — BUILD-008
 
@@ -117,3 +129,4 @@ OPS-001 reservation for `docs/DEPLOYMENT_PC_COMPANION.md` remains released.
 - 2026-09-21T15:21:00Z — Final exact-head CI run `35618277426` succeeded.
 - 2026-09-21T15:21:00Z — PR #8 merged as `45f3c607c274e8ccfa93e5687db489d57db1c31a`.
 - 2026-09-21T15:22:00Z — HANDOFF/WORKBOARD synchronized; CORE-008 marked done and reservation released; REL-005, TEST-008, UX-007 and LIVE-001 unblocked.
+- 2026-09-21T15:25:00Z — Agent 3 claimed REL-005 and reserved browser gateway plus cloud companion reliability paths after confirming no overlap with open PR #9/#10/#5.

@@ -47,7 +47,7 @@ export function normalizeEasyEdaPrimitiveId(primitiveId: string): string {
 
 function parseOptionalText(value: unknown, label: string): string | undefined {
   if (value === undefined) return undefined;
-  if (typeof value !== 'string' || value.length === 0 || value.length > MAX_COMPONENT_TEXT_LENGTH) {
+  if (typeof value !== 'string' || value.length > MAX_COMPONENT_TEXT_LENGTH) {
     throw new Error(`Invalid EasyEDA PCB component state: ${label} is invalid`);
   }
   return value;
@@ -158,8 +158,8 @@ if (
   || !Number.isFinite(rotation)
   || typeof primitiveLock !== 'boolean'
   || (layerId !== 1 && layerId !== 2)
-  || (designator !== undefined && (typeof designator !== 'string' || !designator || designator.length > ${MAX_COMPONENT_TEXT_LENGTH}))
-  || (name !== undefined && (typeof name !== 'string' || !name || name.length > ${MAX_COMPONENT_TEXT_LENGTH}))
+  || (designator !== undefined && (typeof designator !== 'string' || designator.length > ${MAX_COMPONENT_TEXT_LENGTH}))
+  || (name !== undefined && (typeof name !== 'string' || name.length > ${MAX_COMPONENT_TEXT_LENGTH}))
 ) {
   return { version: 1, ok: false, component: null, reason: 'invalid-component-state' };
 }

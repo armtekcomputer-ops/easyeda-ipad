@@ -35,6 +35,12 @@ function documentTypeLabel(documentType: number | undefined) {
   return `Type ${documentType}`;
 }
 
+function selectionDocumentSupported(documentType: number | undefined) {
+  return documentType === EASYEDA_DOCUMENT_TYPE.SCHEMATIC_PAGE
+    || documentType === EASYEDA_DOCUMENT_TYPE.PCB
+    || documentType === EASYEDA_DOCUMENT_TYPE.FOOTPRINT;
+}
+
 function contextName(snapshot: EasyEdaSnapshot | null) {
   if (!snapshot) return null;
   if (snapshot.context.kind === 'pcb') return snapshot.context.name ?? 'PCB';
@@ -70,6 +76,7 @@ export default function App() {
   const [snapshot, setSnapshot] = useState<EasyEdaSnapshot | null>(null);
   const [snapshotState, setSnapshotState] = useState<SnapshotState>('idle');
   const [snapshotError, setSnapshotError] = useState<string | null>(null);
+  const [selectionBusy, setSelectionBusy] = useState(false);
   const { zoom, offset, inputMode, resetView, handlers } = useCanvasViewport();
 
   useEffect(() => {
@@ -136,7 +143,7 @@ export default function App() {
   };
 
   const refreshSnapshot = async () => {
-    if (gatewayState !== 'connected' || snapshotState === 'loading') return;
+    if (gatewayState !== 'connected' || snapshotState === 'loading' || selectionBusy) return;
     setSnapshotState('loading');
     setSnapshotError(null);
     try {
@@ -149,8 +156,39 @@ export default function App() {
     }
   };
 
+  const runSelectionMutation = async (mutation: () => Promise<EasyEdaSnapshot>) => {
+    if (gatewayState !== 'connected' || selectionBusy || snapshotState === 'loading') return;
+    setSelectionBusy(true);
+    setSnapshotError(null);
+    try {
+      const next = await mutation();
+      setSnapshot(next);
+      setSnapshotState('ready');
+    } catch (error) {
+      setSnapshotState('error');
+      setSnapshotError(error instanceof Error ? error.message : 'Unable to synchronize EasyEDA selection');
+    } finally {
+      setSelectionBusy(false);
+    }
+  };
+
+  const clearSelection = () => {
+    void runSelectionMutation(() => easyeda.clearSelection());
+  };
+
+  const reapplySnapshotSelection = () => {
+    const ids = snapshot?.selection.ids ?? [];
+    if (ids.length === 0) return;
+    void runSelectionMutation(() => easyeda.selectPrimitiveIds(ids));
+  };
+
   const projectTitle = snapshot?.project?.friendlyName ?? contextName(snapshot) ?? 'EasyEDA workspace';
   const firstSelectedId = snapshot?.selection.ids[0];
+  const selectionSupported = selectionDocumentSupported(snapshot?.document?.documentType);
+  const selectionControlsDisabled = gatewayState !== 'connected'
+    || selectionBusy
+    || snapshotState === 'loading'
+    || !selectionSupported;
 
   return (
     <main className="app-shell">
@@ -173,7 +211,7 @@ export default function App() {
             className="primary-button"
             type="button"
             onClick={() => void refreshSnapshot()}
-            disabled={gatewayState !== 'connected' || snapshotState === 'loading'}
+            disabled={gatewayState !== 'connected' || snapshotState === 'loading' || selectionBusy}
           >
             {snapshotState === 'loading' ? 'Refreshing…' : 'Refresh from EasyEDA'}
           </button>
@@ -210,7 +248,7 @@ export default function App() {
               style={{ transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})` }}
             >
               <div className="demo-board">
-                <div className="board-title">READ-ONLY WORKSPACE PREVIEW</div>
+                <div className="board-title">EASYEDA SELECTION SYNC</div>
                 <div className="component component-a">
                   <span>LIVE STATE</span>
                   <strong>{documentTypeLabel(snapshot?.document?.documentType)}</strong>
@@ -331,10 +369,35 @@ export default function App() {
               className="secondary-button wide"
               type="button"
               onClick={() => void refreshSnapshot()}
-              disabled={gatewayState !== 'connected' || snapshotState === 'loading'}
+              disabled={gatewayState !== 'connected' || snapshotState === 'loading' || selectionBusy}
             >
               {snapshotState === 'loading' ? 'Reading EasyEDA…' : 'Refresh from EasyEDA'}
             </button>
+          </div>
+
+          <div className="panel-section">
+            <span className="eyebrow">SELECTION SYNC</span>
+            <div className="setting-row"><span>API domain</span><strong>{selectionSupported ? 'Supported' : 'Unavailable'}</strong></div>
+            <div className="setting-row"><span>Validated IDs</span><strong>{snapshot?.selection.ids.length ?? 0}</strong></div>
+            <div className="selection-actions">
+              <button
+                className="secondary-button wide"
+                type="button"
+                onClick={reapplySnapshotSelection}
+                disabled={selectionControlsDisabled || (snapshot?.selection.ids.length ?? 0) === 0}
+              >
+                {selectionBusy ? 'Syncing…' : 'Re-apply snapshot IDs'}
+              </button>
+              <button
+                className="secondary-button wide"
+                type="button"
+                onClick={clearSelection}
+                disabled={selectionControlsDisabled || (snapshot?.selection.total ?? 0) === 0}
+              >
+                {selectionBusy ? 'Syncing…' : 'Clear EasyEDA selection'}
+              </button>
+            </div>
+            <p className="panel-note">Selection writes use only validated IDs already read from EasyEDA. State is read back after every successful mutation.</p>
           </div>
 
           <div className="panel-section">
@@ -366,7 +429,7 @@ export default function App() {
 
       <footer className="statusbar">
         <span>Tool: {activeTool}</span>
-        <span>Read-only EasyEDA snapshot</span>
+        <span>EasyEDA selection sync</span>
         <span>{snapshot ? `${snapshot.selection.total} selected` : 'No snapshot'}</span>
         <span className={`status-dot-wrap status-${gatewayState}`}><i />{stateLabel(gatewayState)}</span>
       </footer>

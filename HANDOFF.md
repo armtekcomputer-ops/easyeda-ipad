@@ -7,6 +7,7 @@ Last updated: 2026-09-21 (Asia/Bangkok)
 Repository: `armtekcomputer-ops/easyeda-ipad`
 Branch in progress: `feat/cloudflare-vps-handoff-loop`
 Base: `main`
+PR: `#2`
 
 This file is the operational handoff. Continue work from this file first, not from chat memory.
 
@@ -76,7 +77,16 @@ EasyEDA Pro on VPS
 - [x] Add npm scripts for Worker type generation/dev/deploy and cloud agent.
 - [x] Update README with VPS + Cloudflare deployment, Worker secrets, cloud agent, iPad connection flow, systemd example, and security guidance.
 - [x] Extend CI to build PWA, generate/typecheck Worker types, run Wrangler deploy dry-run, and syntax-check both companion modes.
-- [ ] Open PR, run CI, fix failures, merge when green.
+- [x] Open PR #2.
+- [ ] Get CI green, fix every failure, then merge.
+
+## CI loop history
+
+### Run 1 on PR #2
+
+- Failed in `actions/setup-node` before dependencies/build.
+- Cause: `cache: npm` requires a lockfile but this repository currently has no `package-lock.json`.
+- Fix committed: remove npm caching from `setup-node` so CI can reach the actual build/type/Wrangler checks.
 
 ## Files added or changed in current branch
 
@@ -116,4 +126,4 @@ At each meaningful milestone:
 
 ## Next action
 
-Open the Phase 2 PR. Let GitHub Actions perform the authoritative build/type/config validation. Fix every CI failure on the same branch, update this HANDOFF, re-read it, and merge only after CI is green.
+Wait for the new PR #2 CI run triggered by commit `408d1b68a9c51a60e43880897c03b099ed7a99de`. Inspect the first failing step if any, fix it on this branch, update/re-read this HANDOFF, and repeat until CI is green.

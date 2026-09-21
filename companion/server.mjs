@@ -14,6 +14,9 @@ const ALLOWED_ORIGIN = process.env.EASYEDA_IPAD_ALLOWED_ORIGIN || '';
 const TOKEN_FILE = join(homedir(), '.easyeda-ipad-token');
 const SERVICE_ID = 'easyeda-bridge';
 const MAX_CODE_BYTES = 128 * 1024;
+const MAX_FRAME_BYTES = MAX_CODE_BYTES + 16 * 1024;
+const MAX_ID_LENGTH = 2048;
+const MAX_ERROR_LENGTH = 4096;
 
 function loadToken() {
   if (process.env.EASYEDA_IPAD_TOKEN) return process.env.EASYEDA_IPAD_TOKEN.trim();
@@ -43,15 +46,51 @@ function localAddresses() {
   return [...new Set(addresses)];
 }
 
+function sendJson(ws, payload) {
+  if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(payload));
+}
+
+function isRecord(value) {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function optionalBoundedString(record, key, maxLength) {
+  const value = record[key];
+  return value === undefined || (typeof value === 'string' && value.length <= maxLength);
+}
+
+function parseMessage(raw) {
+  const text = raw.toString();
+  if (Buffer.byteLength(text, 'utf8') > MAX_FRAME_BYTES) return null;
+
+  let value;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    return null;
+  }
+
+  if (!isRecord(value)) return null;
+  if (value.type !== undefined && (typeof value.type !== 'string' || value.type.length > 64)) return null;
+  if (!optionalBoundedString(value, 'id', MAX_ID_LENGTH)) return null;
+  if (!optionalBoundedString(value, 'service', 128)) return null;
+  if (!optionalBoundedString(value, 'code', MAX_CODE_BYTES)) return null;
+  if (!optionalBoundedString(value, 'error', MAX_ERROR_LENGTH)) return null;
+  if (value.edaConnected !== undefined && typeof value.edaConnected !== 'boolean') return null;
+  if (
+    value.localBridgePort !== undefined
+    && value.localBridgePort !== null
+    && (!Number.isInteger(value.localBridgePort) || value.localBridgePort < 1 || value.localBridgePort > 65_535)
+  ) return null;
+  if (value.timestamp !== undefined && (typeof value.timestamp !== 'number' || !Number.isFinite(value.timestamp))) return null;
+  return value;
+}
+
 let localBridge = null;
 let localBridgePort = null;
 let reconnectTimer = null;
 const pending = new Map();
 const clients = new Set();
-
-function sendJson(ws, payload) {
-  if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(payload));
-}
 
 function scheduleLocalReconnect(delay = 2000) {
   if (reconnectTimer) return;
@@ -76,13 +115,11 @@ function tryLocalPort(port) {
     };
 
     ws.once('message', (raw) => {
-      try {
-        const message = JSON.parse(raw.toString());
-        if (message.type === 'handshake' && message.service === SERVICE_ID) {
-          finish(ws);
-          return;
-        }
-      } catch { /* ignore invalid handshake */ }
+      const message = parseMessage(raw);
+      if (message?.type === 'handshake' && message.service === SERVICE_ID) {
+        finish(ws);
+        return;
+      }
       finish(null);
     });
     ws.once('error', () => finish(null));
@@ -120,14 +157,10 @@ async function connectLocalBridge() {
 }
 
 function onLocalBridgeMessage(raw) {
-  let message;
-  try {
-    message = JSON.parse(raw.toString());
-  } catch {
-    return;
-  }
+  const message = parseMessage(raw);
+  if (!message) return;
 
-  if ((message.type === 'result' || message.type === 'error') && message.id) {
+  if ((message.type === 'result' || message.type === 'error') && typeof message.id === 'string') {
     const request = pending.get(message.id);
     if (!request) return;
     pending.delete(message.id);
@@ -215,10 +248,9 @@ wss.on('connection', (ws) => {
   });
 
   ws.on('message', (raw) => {
-    let message;
-    try {
-      message = JSON.parse(raw.toString());
-    } catch {
+    const message = parseMessage(raw);
+    if (!message) {
+      sendJson(ws, { type: 'error', error: 'Invalid message envelope', timestamp: Date.now() });
       return;
     }
 
@@ -228,7 +260,7 @@ wss.on('connection', (ws) => {
     }
 
     if (message.type !== 'execute') return;
-    if (typeof message.code !== 'string' || !message.id) {
+    if (typeof message.code !== 'string' || typeof message.id !== 'string' || message.id.length === 0) {
       sendJson(ws, { type: 'error', id: message.id, error: 'Invalid execute request', timestamp: Date.now() });
       return;
     }

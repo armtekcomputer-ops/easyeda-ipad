@@ -41,58 +41,159 @@ EasyEDA Pro on VPS
 - Bounded primitive summaries and browser-side response validation.
 - Selection synchronization for PCB/footprint/schematic using only verified public APIs.
 - Selection writes accept only validated snapshot IDs; maximum 100 IDs, max 256 characters each, trim/dedupe, JSON serialization.
-- Successful selection mutation always reads state back through `getSnapshot()`.
+- Successful selection mutation always reads back through `getSnapshot()`.
 - PR #4 merged after the exact latest head passed tests, TypeScript/Vite, Worker typecheck, Wrangler dry-run, and companion checks.
 - Package version on `main`: `0.4.0`.
 
 ## Phase 5 goal
 
-Add the next narrowly-scoped editing capability only if exact public EasyEDA APIs can be verified: move and/or rotate already-selected primitives.
+Add a narrowly-scoped transform capability for **selected device components only** in active PCB and schematic-page documents.
 
-Do **not** implement routing, wire creation, arbitrary property editing, save, undo, redo, delete, copy/paste, or document creation in this phase.
+Do **not** implement transform for arbitrary primitive types, footprint-editor primitives, routing, wire creation, arbitrary property editing, save, undo, redo, delete, copy/paste, or document creation in this phase.
 
-## Required research before code
+## Official API research findings
 
-Search the official `easyeda/easyeda-api-skill` references/examples for exact PCB/footprint and schematic APIs that can safely transform existing primitives.
+Research source: official `easyeda/easyeda-api-skill` references/examples only.
 
-Research specifically:
+### No generic all-primitive transform API
 
-- move/translate primitive APIs
-- rotate primitive APIs
-- whether operations accept primitive IDs, primitive objects, or coordinates
-- coordinate units and rotation units
-- absolute vs relative movement semantics
-- return types / async behavior
-- whether APIs operate on the active document only
-- whether generic transform APIs exist across primitive types or require class-specific methods
-- whether move/rotate operations are marked BETA
-- any documented constraints around locked primitives, components, nets, or parent/child primitives
+Searches for generic `movePrimitive(s)` / `rotatePrimitive(s)` / translate operations did not find a documented editor mutation API that safely transforms every primitive type. `SYS_Math.translate/rotate` only transforms polygon geometry in memory and is not an editor mutation API.
+
+Many primitive classes expose type-specific `modify(...)` methods. To avoid unsafe type dispatch across tracks, pads, text, arcs, vias, pins, etc., Phase 5 is restricted to the verified **device component** APIs.
+
+### PCB device components
+
+Namespace: `eda.pcb_PrimitiveComponent` (`PCB & footprint / device primitive class`).
+
+Verified methods used for Phase 5:
+
+- `get(primitiveIds: string): Promise<IPCB_PrimitiveComponent | undefined>`
+- `modify(primitiveId: string | IPCB_PrimitiveComponent, property): Promise<IPCB_PrimitiveComponent | undefined>` — BETA
+
+Verified `modify` transform fields:
+
+- `x?: number`
+- `y?: number`
+- `rotation?: number`
+- `primitiveLock?: boolean` also exists, but Phase 5 will not change lock state
+
+Verified component state accessors available on the returned component:
+
+- `getState_X(): number`
+- `getState_Y(): number`
+- `getState_Rotation(): number`
+- `getState_PrimitiveLock(): boolean`
+
+The component object also exposes the documented async mutation pattern (`toAsync()`, `setState_X/Y/Rotation()`, `done()`), and the official skill gives an example of this pattern. Phase 5 will use the simpler documented `modify(...)` API after reading the current component state; it will not manipulate raw object fields.
+
+PCB locked components must be rejected before mutation when `getState_PrimitiveLock()` is true.
+
+### Schematic device components
+
+Namespace: `eda.sch_PrimitiveComponent` (`Schematic & symbol / device primitive class`).
+
+Verified methods used for Phase 5:
+
+- `get(primitiveIds: string): Promise<ISCH_PrimitiveComponent | undefined>`
+- `modify(primitiveId: string | ISCH_PrimitiveComponent, property): Promise<ISCH_PrimitiveComponent | undefined>` — BETA
+
+Verified `modify` transform fields include:
+
+- `x?: number`
+- `y?: number`
+- `rotation?: number`
+- `mirror?: boolean` also exists, but Phase 5 will not change mirror state
+
+Verified component state accessors:
+
+- `getState_X(): number`
+- `getState_Y(): number`
+- `getState_Rotation(): number`
+
+### Coordinate and rotation units
+
+Official EasyEDA documentation states:
+
+- PCB/footprint canvas coordinate unit: **1 mil**
+- schematic/symbol canvas coordinate unit: **0.01 inch = 10 mil**
+- rotation angles are in **degrees**
+- positive rotation is **counter-clockwise**
+
+For a consistent physical nudge in the iPad UI, Phase 5 will use a fixed **0.254 mm** movement step:
+
+- PCB: 10 native units = 10 mil = 0.254 mm
+- schematic: 1 native unit = 0.01 inch = 0.254 mm
+
+Rotation controls will use fixed `+90°` / `-90°` deltas.
+
+### Absolute vs relative semantics
+
+`modify(...)` accepts component property values (`x`, `y`, `rotation`) rather than delta arguments. Phase 5 therefore implements relative transforms by:
+
+1. retrieving each selected component with `get(id)`,
+2. reading current `getState_X/Y/Rotation()`,
+3. calculating bounded new absolute values,
+4. calling `modify(id, { x, y, rotation })` with only the fields required for that operation.
+
+No raw component object fields are mutated.
+
+### Active document and supported domains
+
+Phase 5 checks `eda.dmt_SelectControl.getCurrentDocumentInfo()` inside the same execute request before component lookup/mutation.
+
+Supported document types:
+
+- `PCB = 3` -> `eda.pcb_PrimitiveComponent`
+- `SCHEMATIC_PAGE = 1` -> `eda.sch_PrimitiveComponent`
+
+`FOOTPRINT = 4` is intentionally excluded from this phase. Although the PCB API family is also used by the footprint editor, Phase 5 specifically transforms **device component instances**, and a footprint-editor selection is not assumed to represent a device component.
+
+### Preflight / partial-write rule
+
+Before any component is modified, every requested validated selection ID must resolve through the appropriate `PrimitiveComponent.get(id)` API. If any selected ID is not a device component, the entire transform fails before any mutation occurs.
+
+For PCB, all resolved components must also be unlocked before any mutation starts.
+
+This prevents a mixed selection (for example component + track) from being partially transformed.
+
+## Phase 5 implementation decision
+
+Phase 5 supports:
+
+- move selected PCB device component(s) by a fixed 0.254 mm nudge
+- move selected schematic device component(s) by a fixed 0.254 mm nudge
+- rotate selected PCB device component(s) by ±90°
+- rotate selected schematic device component(s) by ±90°
+
+It does not support arbitrary numeric text input yet. The UI will operate only on IDs from the latest validated snapshot.
 
 ## Phase 5 safety rules
 
-- Use only exact documented public APIs from official EasyEDA repositories.
-- Never infer a method name from UI behavior.
-- Do not manipulate raw internal object structures unless a documented API explicitly requires them.
-- Prefer one generic documented transform API over many primitive-type-specific mutation paths.
+- Use only the exact documented component APIs above.
+- Never infer a generic transform API or dispatch arbitrary primitive types.
 - Operate only on primitive IDs already present in validated EasyEDA snapshot state.
 - Maximum transform request: 100 IDs.
-- Bound numeric deltas/angles before generating execute code.
-- Embed validated arrays/numbers through deterministic serialization, never raw UI string interpolation.
-- Check the active document type inside the same execute request before mutation.
-- Return and validate a compact mutation result.
-- After successful mutation, call `getSnapshot()` and use that read-back as the source of truth.
-- If public APIs differ substantially between PCB and schematic, implement only the domain that can be safely verified first rather than forcing symmetry.
-- If no safe public transform API exists, do not implement a write workaround; record the limitation and select a different verified capability.
+- Reuse the existing primitive-ID validation: trimmed, non-empty, max 256 characters, de-duplicated.
+- Preflight all IDs as components before the first write.
+- Reject PCB locked components before the first write.
+- Movement is fixed to one 0.254 mm UI step per request; no arbitrary coordinate input in this phase.
+- Rotation delta is fixed to ±90° per request.
+- Check active document type inside the same execute request before lookup/mutation.
+- Generated code embeds only validated serialized IDs and fixed finite numeric deltas.
+- Return and browser-validate a compact mutation result.
+- Treat `modify(...)` returning `undefined` as mutation failure.
+- After successful mutation, call `getSnapshot()` and use that fresh validated read-back as the source of truth.
+- If any preflight check fails, perform zero component mutations.
 
 ## Planned Phase 5 deliverables
 
-- [ ] Record exact verified transform API signatures/semantics in this HANDOFF.
-- [ ] Decide whether Phase 5 supports PCB, schematic, or both based on official API evidence.
-- [ ] Add typed transform command builders and response validation.
-- [ ] Add unit/input bounds and document-type dispatch.
-- [ ] Add tests proving only verified transform APIs are called.
-- [ ] Add iPad transform controls that operate only on validated snapshot selection IDs.
-- [ ] Read back state after every successful mutation.
+- [x] Record exact verified transform API signatures/semantics in this HANDOFF.
+- [x] Decide scope: PCB + schematic **device components only**.
+- [ ] Add typed component-transform command builders and response validation.
+- [ ] Add component preflight, locked-PCB rejection, input bounds, and document-type dispatch.
+- [ ] Add tests proving only verified `pcb_PrimitiveComponent` / `sch_PrimitiveComponent` APIs are called and mixed/non-component selection causes zero writes.
+- [ ] Add iPad nudge/rotate controls that operate only on validated snapshot selection IDs.
+- [ ] Read back state after every successful transform.
 - [ ] Open a separate PR, run CI, update README/version/HANDOFF, and merge only when latest head is green.
 
 ## Loop rule
@@ -105,4 +206,4 @@ At each meaningful milestone:
 
 ## Next action
 
-Research the official EasyEDA API references for generic or primitive-specific move/translate and rotate operations in PCB/footprint and schematic domains. Record exact method names, arguments, units, and limitations before writing any Phase 5 mutation code.
+Implement a typed component-transform layer in `src/lib/easyeda-api.ts` for four fixed operations: nudge left/right/up/down by one physical 0.254 mm step and rotate ±90°. The execute command must preflight every validated snapshot ID as a device component (and reject locked PCB components) before the first `modify(...)` call, return a compact versioned result, and trigger `getSnapshot()` only after complete success. Add focused Vitest coverage before changing the UI.

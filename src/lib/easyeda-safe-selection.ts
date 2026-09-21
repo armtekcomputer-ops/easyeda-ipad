@@ -52,29 +52,31 @@ function mutationResultCode(
   return `({ version: 1, operation: '${operation}', ok: ${successExpression} === true, documentType, requested: ${requested}, ...(${successExpression} === true ? {} : { reason: 'mutation-failed' }) })`;
 }
 
-function guardPrefix(expectedDocument: EasyEdaDocumentIdentity): string {
+function guardPrefix(
+  expectedDocument: EasyEdaDocumentIdentity,
+  operation: SafeSelectionOperation,
+  requested: number,
+): string {
   const expected = normalizeDocumentIdentity(expectedDocument);
   return `
 const expectedDocument = ${JSON.stringify(expected)};
 const doc = await eda.dmt_SelectControl.getCurrentDocumentInfo();
 const documentType = doc?.documentType ?? null;
 if (!doc) {
-  return { version: 1, operation: OPERATION, ok: false, documentType, requested: REQUESTED, reason: 'no-document' };
+  return { version: 1, operation: '${operation}', ok: false, documentType, requested: ${requested}, reason: 'no-document' };
 }
 if (
   doc.documentType !== expectedDocument.documentType
   || doc.uuid !== expectedDocument.uuid
   || doc.tabId !== expectedDocument.tabId
 ) {
-  return { version: 1, operation: OPERATION, ok: false, documentType, requested: REQUESTED, reason: 'document-changed' };
+  return { version: 1, operation: '${operation}', ok: false, documentType, requested: ${requested}, reason: 'document-changed' };
 }
 `.trim();
 }
 
 export function buildSafeClearSelectionCode(expectedDocument: EasyEdaDocumentIdentity): string {
-  const prefix = guardPrefix(expectedDocument)
-    .replaceAll('OPERATION', "'clear'")
-    .replaceAll('REQUESTED', '0');
+  const prefix = guardPrefix(expectedDocument, 'clear', 0);
 
   return `
 ${prefix}
@@ -95,9 +97,7 @@ export function buildSafeSelectPrimitiveIdsCode(
   ids: readonly string[],
 ): string {
   const primitiveIds = normalizeEasyEdaPrimitiveIds(ids);
-  const prefix = guardPrefix(expectedDocument)
-    .replaceAll('OPERATION', "'select'")
-    .replaceAll('REQUESTED', String(primitiveIds.length));
+  const prefix = guardPrefix(expectedDocument, 'select', primitiveIds.length);
 
   return `
 const primitiveIds = ${JSON.stringify(primitiveIds)};
@@ -119,10 +119,18 @@ export function parseSafeSelectionResult(value: unknown): SafeSelectionResult {
   if (value.version !== 1) throw new Error('Invalid safe selection result: unsupported version');
   if (value.operation !== 'clear' && value.operation !== 'select') throw new Error('Invalid safe selection result: operation is invalid');
   if (typeof value.ok !== 'boolean') throw new Error('Invalid safe selection result: ok must be boolean');
-  if (value.documentType !== null && (!Number.isInteger(value.documentType))) {
+  if (
+    value.documentType !== null
+    && (typeof value.documentType !== 'number' || !Number.isInteger(value.documentType))
+  ) {
     throw new Error('Invalid safe selection result: documentType is invalid');
   }
-  if (!Number.isInteger(value.requested) || (value.requested as number) < 0 || (value.requested as number) > 100) {
+  if (
+    typeof value.requested !== 'number'
+    || !Number.isInteger(value.requested)
+    || value.requested < 0
+    || value.requested > 100
+  ) {
     throw new Error('Invalid safe selection result: requested is invalid');
   }
 
@@ -144,8 +152,8 @@ export function parseSafeSelectionResult(value: unknown): SafeSelectionResult {
     version: 1,
     operation: value.operation,
     ok: value.ok,
-    documentType: value.documentType as number | null,
-    requested: value.requested as number,
+    documentType: value.documentType,
+    requested: value.requested,
     reason,
   };
 }

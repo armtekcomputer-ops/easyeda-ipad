@@ -2,11 +2,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { useCanvasViewport } from './hooks/useCanvasViewport';
 import { EasyEdaApi, EASYEDA_DOCUMENT_TYPE, type EasyEdaSnapshot } from './lib/easyeda-api';
 import { EasyEdaEditorApi, type EasyEdaEditorState } from './lib/easyeda-editor';
+import { EasyEdaPcbComponentApi, type EasyEdaPcbComponentState } from './lib/easyeda-pcb-component';
 import {
   EasyEdaProjectDocumentsApi,
   type EasyEdaCurrentProjectDocuments,
   type EasyEdaProjectDocumentKind,
 } from './lib/easyeda-project-documents';
+import { EasyEdaSafeSelectionApi } from './lib/easyeda-safe-selection';
 import { EasyEdaGatewayClient, type GatewayState, type GatewayStatus } from './lib/gateway';
 
 const tools = [
@@ -51,6 +53,11 @@ function selectionDocumentSupported(documentType: number | undefined) {
     || documentType === EASYEDA_DOCUMENT_TYPE.FOOTPRINT;
 }
 
+function pcbComponentInspectionSupported(documentType: number | undefined) {
+  return documentType === EASYEDA_DOCUMENT_TYPE.PCB
+    || documentType === EASYEDA_DOCUMENT_TYPE.FOOTPRINT;
+}
+
 function contextName(snapshot: EasyEdaSnapshot | null) {
   if (!snapshot) return null;
   if (snapshot.context.kind === 'pcb') return snapshot.context.name ?? 'PCB';
@@ -74,7 +81,9 @@ function cloudSocketUrl(session: string, token: string) {
 export default function App() {
   const gateway = useMemo(() => new EasyEdaGatewayClient(), []);
   const easyeda = useMemo(() => new EasyEdaApi(gateway), [gateway]);
+  const safeSelection = useMemo(() => new EasyEdaSafeSelectionApi(gateway), [gateway]);
   const editor = useMemo(() => new EasyEdaEditorApi(gateway), [gateway]);
+  const pcbComponentApi = useMemo(() => new EasyEdaPcbComponentApi(gateway), [gateway]);
   const projectDocumentsApi = useMemo(() => new EasyEdaProjectDocumentsApi(gateway), [gateway]);
   const [gatewayState, setGatewayState] = useState<GatewayState>('disconnected');
   const [gatewayStatus, setGatewayStatus] = useState<GatewayStatus>({});
@@ -92,11 +101,25 @@ export default function App() {
   const [editorState, setEditorState] = useState<EasyEdaEditorState | null>(null);
   const [editorBusy, setEditorBusy] = useState(false);
   const [editorError, setEditorError] = useState<string | null>(null);
+  const [pcbComponent, setPcbComponent] = useState<EasyEdaPcbComponentState | null>(null);
+  const [pcbComponentBusy, setPcbComponentBusy] = useState(false);
+  const [pcbComponentError, setPcbComponentError] = useState<string | null>(null);
   const [projectDocuments, setProjectDocuments] = useState<EasyEdaCurrentProjectDocuments | null>(null);
   const [projectDocumentsBusy, setProjectDocumentsBusy] = useState(false);
   const [projectDocumentsError, setProjectDocumentsError] = useState<string | null>(null);
   const [selectedProjectDocumentUuid, setSelectedProjectDocumentUuid] = useState('');
   const { zoom, offset, inputMode, resetView, handlers } = useCanvasViewport();
+
+  const invalidateTrustedState = (message: string) => {
+    setSnapshot(null);
+    setEditorState(null);
+    setPcbComponent(null);
+    setPcbComponentError(null);
+    setProjectDocuments(null);
+    setSelectedProjectDocumentUuid('');
+    setSnapshotState('error');
+    setSnapshotError(message);
+  };
 
   useEffect(() => {
     const onStateChange = (event: Event) => {
@@ -108,6 +131,8 @@ export default function App() {
         setSnapshotError(null);
         setEditorState(null);
         setEditorError(null);
+        setPcbComponent(null);
+        setPcbComponentError(null);
         setProjectDocuments(null);
         setProjectDocumentsError(null);
         setSelectedProjectDocumentUuid('');
@@ -136,6 +161,11 @@ export default function App() {
   }, [projectDocuments]);
 
   useEffect(() => {
+    setPcbComponent(null);
+    setPcbComponentError(null);
+  }, [snapshot?.capturedAt]);
+
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) return;
       if (event.key === '1') setActiveTool('select');
@@ -147,7 +177,7 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [resetView]);
 
-  const interactionBusy = selectionBusy || editorBusy || projectDocumentsBusy;
+  const interactionBusy = selectionBusy || editorBusy || pcbComponentBusy || projectDocumentsBusy;
   const canConnect = connectionMode === 'cloud'
     ? Boolean(cloudSession.trim() && cloudToken.trim())
     : Boolean(gatewayUrl.trim());
@@ -181,6 +211,7 @@ export default function App() {
     setSnapshotState('loading');
     setSnapshotError(null);
     setEditorError(null);
+    setPcbComponentError(null);
     setProjectDocumentsError(null);
     try {
       const [nextSnapshot, nextEditorState, nextProjectDocuments] = await Promise.all([
@@ -195,6 +226,7 @@ export default function App() {
     } catch (error) {
       setSnapshot(null);
       setEditorState(null);
+      setPcbComponent(null);
       setProjectDocuments(null);
       setSnapshotState('error');
       setSnapshotError(error instanceof Error ? error.message : 'Unable to read EasyEDA state');
@@ -202,57 +234,66 @@ export default function App() {
   };
 
   const runSelectionMutation = async (mutation: () => Promise<EasyEdaSnapshot>) => {
-    if (gatewayState !== 'connected' || interactionBusy || snapshotState === 'loading') return;
+    if (gatewayState !== 'connected' || interactionBusy || snapshotState !== 'ready' || !snapshot?.document) return;
     setSelectionBusy(true);
+    setSnapshot(null);
+    setPcbComponent(null);
+    setPcbComponentError(null);
+    setSnapshotState('loading');
     setSnapshotError(null);
     try {
       const next = await mutation();
       setSnapshot(next);
       setSnapshotState('ready');
     } catch (error) {
-      setSnapshotState('error');
-      setSnapshotError(error instanceof Error ? error.message : 'Unable to synchronize EasyEDA selection');
+      invalidateTrustedState(
+        `${error instanceof Error ? error.message : 'Unable to synchronize EasyEDA selection'}. The operation may have completed; refresh from EasyEDA before another write.`,
+      );
     } finally {
       setSelectionBusy(false);
     }
   };
 
   const clearSelection = () => {
-    void runSelectionMutation(() => easyeda.clearSelection());
+    const document = snapshot?.document;
+    if (!document || snapshotState !== 'ready') return;
+    void runSelectionMutation(() => safeSelection.clearSelection(document));
   };
 
   const reapplySnapshotSelection = () => {
+    const document = snapshot?.document;
     const ids = snapshot?.selection.ids ?? [];
-    if (ids.length === 0) return;
-    void runSelectionMutation(() => easyeda.selectPrimitiveIds(ids));
+    if (!document || snapshotState !== 'ready' || ids.length === 0) return;
+    void runSelectionMutation(() => safeSelection.selectPrimitiveIds(document, ids));
   };
 
   const activateEditorTab = async (tabId: string) => {
-    if (gatewayState !== 'connected' || interactionBusy || snapshotState === 'loading') return;
+    if (gatewayState !== 'connected' || interactionBusy || snapshotState !== 'ready' || !snapshot?.document) return;
     if (!editorState?.tabs.some((tab) => tab.tabId === tabId)) return;
     setEditorBusy(true);
     setEditorError(null);
     setSnapshotError(null);
+    setPcbComponent(null);
+    setPcbComponentError(null);
     setProjectDocumentsError(null);
+    setSnapshot(null);
+    setEditorState(null);
+    setProjectDocuments(null);
+    setSnapshotState('loading');
     try {
       const nextEditorState = await editor.activateTab(tabId);
+      const [nextSnapshot, nextProjectDocuments] = await Promise.all([
+        easyeda.getSnapshot(),
+        projectDocumentsApi.getCurrentProjectDocuments(),
+      ]);
       setEditorState(nextEditorState);
-      try {
-        const [nextSnapshot, nextProjectDocuments] = await Promise.all([
-          easyeda.getSnapshot(),
-          projectDocumentsApi.getCurrentProjectDocuments(),
-        ]);
-        setSnapshot(nextSnapshot);
-        setProjectDocuments(nextProjectDocuments);
-        setSnapshotState('ready');
-      } catch (error) {
-        setSnapshot(null);
-        setProjectDocuments(null);
-        setSnapshotState('error');
-        setSnapshotError(error instanceof Error ? error.message : 'EasyEDA tab changed, but trusted project/document state could not be refreshed');
-      }
+      setSnapshot(nextSnapshot);
+      setProjectDocuments(nextProjectDocuments);
+      setSnapshotState('ready');
     } catch (error) {
-      setEditorError(error instanceof Error ? error.message : 'Unable to activate EasyEDA tab');
+      const message = error instanceof Error ? error.message : 'Unable to activate EasyEDA tab';
+      setEditorError(`${message}. The active tab may have changed; refresh from EasyEDA before another action.`);
+      invalidateTrustedState('Trusted EasyEDA state was invalidated because tab activation had an uncertain outcome. Refresh from EasyEDA.');
     } finally {
       setEditorBusy(false);
     }
@@ -260,7 +301,7 @@ export default function App() {
 
   const fitEditor = async (mode: 'all' | 'selection') => {
     const tabId = editorState?.activeTabId;
-    if (!tabId || gatewayState !== 'connected' || interactionBusy || snapshotState === 'loading') return;
+    if (!tabId || gatewayState !== 'connected' || interactionBusy || snapshotState !== 'ready') return;
     setEditorBusy(true);
     setEditorError(null);
     try {
@@ -273,19 +314,51 @@ export default function App() {
     }
   };
 
+  const inspectSelectedPcbComponent = async () => {
+    const document = snapshot?.document;
+    const ids = snapshot?.selection.ids ?? [];
+    if (
+      gatewayState !== 'connected'
+      || interactionBusy
+      || snapshotState !== 'ready'
+      || !document
+      || !pcbComponentInspectionSupported(document.documentType)
+      || ids.length !== 1
+    ) return;
+
+    setPcbComponentBusy(true);
+    setPcbComponent(null);
+    setPcbComponentError(null);
+    try {
+      const next = await pcbComponentApi.inspectSelectedComponent(document, ids[0]);
+      setPcbComponent(next);
+    } catch (error) {
+      setPcbComponent(null);
+      setPcbComponentError(error instanceof Error ? error.message : 'Unable to inspect the selected PCB component');
+    } finally {
+      setPcbComponentBusy(false);
+    }
+  };
+
   const openCurrentProjectDocument = async () => {
     const documentUuid = selectedProjectDocumentUuid;
-    if (gatewayState !== 'connected' || interactionBusy || snapshotState === 'loading' || !documentUuid) return;
-    if (!projectDocuments?.documents.some((document) => document.uuid === documentUuid)) return;
+    const trustedDocuments = projectDocuments;
+    if (gatewayState !== 'connected' || interactionBusy || snapshotState !== 'ready' || !snapshot?.document || !documentUuid) return;
+    if (!trustedDocuments?.documents.some((document) => document.uuid === documentUuid)) return;
 
     setProjectDocumentsBusy(true);
     setProjectDocumentsError(null);
     setEditorError(null);
     setSnapshotError(null);
-    let documentOpened = false;
+    setPcbComponent(null);
+    setPcbComponentError(null);
+    setSnapshot(null);
+    setEditorState(null);
+    setProjectDocuments(null);
+    setSelectedProjectDocumentUuid('');
+    setSnapshotState('loading');
     try {
       const opened = await projectDocumentsApi.openCurrentProjectDocument(documentUuid);
-      documentOpened = true;
       const nextEditorState = await editor.activateTab(opened.tabId ?? '');
       const [nextSnapshot, nextProjectDocuments] = await Promise.all([
         easyeda.getSnapshot(),
@@ -296,15 +369,9 @@ export default function App() {
       setProjectDocuments(nextProjectDocuments);
       setSnapshotState('ready');
     } catch (error) {
-      if (documentOpened) {
-        setEditorState(null);
-        setSnapshot(null);
-        setProjectDocuments(null);
-        setSnapshotState('error');
-      } else {
-        setProjectDocuments(null);
-      }
-      setProjectDocumentsError(error instanceof Error ? error.message : 'Unable to open EasyEDA project document');
+      const message = error instanceof Error ? error.message : 'Unable to open EasyEDA project document';
+      setProjectDocumentsError(`${message}. The document may have opened; refresh from EasyEDA before another action.`);
+      invalidateTrustedState('Trusted EasyEDA state was invalidated because document opening had an uncertain outcome. Refresh from EasyEDA.');
     } finally {
       setProjectDocumentsBusy(false);
     }
@@ -316,17 +383,27 @@ export default function App() {
     ?? 'EasyEDA workspace';
   const firstSelectedId = snapshot?.selection.ids[0];
   const selectionSupported = selectionDocumentSupported(snapshot?.document?.documentType);
+  const componentInspectionSupported = pcbComponentInspectionSupported(snapshot?.document?.documentType);
   const selectionControlsDisabled = gatewayState !== 'connected'
     || interactionBusy
-    || snapshotState === 'loading'
+    || snapshotState !== 'ready'
+    || !snapshot?.document
     || !selectionSupported;
+  const componentInspectorDisabled = gatewayState !== 'connected'
+    || interactionBusy
+    || snapshotState !== 'ready'
+    || !snapshot?.document
+    || !componentInspectionSupported
+    || snapshot.selection.ids.length !== 1;
   const editorControlsDisabled = gatewayState !== 'connected'
     || interactionBusy
-    || snapshotState === 'loading'
+    || snapshotState !== 'ready'
+    || !snapshot?.document
     || !editorState?.activeTabId;
   const projectDocumentControlsDisabled = gatewayState !== 'connected'
     || interactionBusy
-    || snapshotState === 'loading'
+    || snapshotState !== 'ready'
+    || !snapshot?.document
     || !projectDocuments?.project
     || projectDocuments.documents.length === 0;
 
@@ -413,7 +490,7 @@ export default function App() {
               <div className="gateway-card" onPointerDown={(event) => event.stopPropagation()}>
                 <span className="eyebrow">CONNECTION</span>
                 <h2>Connect to EasyEDA</h2>
-                <p>Cloud mode connects this PWA through Cloudflare to the outbound VPS agent. Direct mode keeps the original LAN companion option.</p>
+                <p>Cloud mode connects this PWA through Cloudflare to the outbound PC companion running beside EasyEDA Pro. Direct mode keeps the original LAN companion option.</p>
 
                 <label>
                   Mode
@@ -421,7 +498,7 @@ export default function App() {
                     value={connectionMode}
                     onChange={(event) => setConnectionMode(event.target.value as ConnectionMode)}
                   >
-                    <option value="cloud">Cloudflare + VPS</option>
+                    <option value="cloud">Cloudflare + PC companion</option>
                     <option value="direct">Direct / LAN companion</option>
                   </select>
                 </label>
@@ -516,6 +593,35 @@ export default function App() {
           </div>
 
           <div className="panel-section">
+            <span className="eyebrow">SELECTED PCB COMPONENT</span>
+            <div className="setting-row"><span>Document</span><strong>{componentInspectionSupported ? 'PCB / footprint' : 'Unavailable'}</strong></div>
+            <div className="setting-row"><span>Selection</span><strong>{snapshot?.selection.ids.length === 1 ? 'Exactly one' : 'Select one component'}</strong></div>
+            <button
+              className="secondary-button wide"
+              type="button"
+              onClick={() => void inspectSelectedPcbComponent()}
+              disabled={componentInspectorDisabled}
+            >
+              {pcbComponentBusy ? 'Inspecting…' : 'Inspect selected component'}
+            </button>
+            {pcbComponent && (
+              <>
+                <div className="setting-row"><span>Designator</span><strong className="truncate-value">{pcbComponent.designator || '—'}</strong></div>
+                <div className="setting-row"><span>Name</span><strong className="truncate-value">{pcbComponent.name || '—'}</strong></div>
+                <div className="setting-row"><span>Primitive ID</span><strong className="truncate-value">{pcbComponent.primitiveId}</strong></div>
+                <div className="setting-row"><span>X (mil)</span><strong>{pcbComponent.x.toLocaleString()}</strong></div>
+                <div className="setting-row"><span>Y (mil)</span><strong>{pcbComponent.y.toLocaleString()}</strong></div>
+                <div className="setting-row"><span>Rotation</span><strong>{pcbComponent.rotation}°</strong></div>
+                <div className="setting-row"><span>Layer</span><strong>{pcbComponent.layer === 'top' ? 'Top' : 'Bottom'}</strong></div>
+                <div className="setting-row"><span>Locked</span><strong>{pcbComponent.primitiveLock ? 'Yes' : 'No'}</strong></div>
+                <div className="setting-row"><span>Captured</span><strong>{new Date(pcbComponent.capturedAt).toLocaleTimeString()}</strong></div>
+              </>
+            )}
+            {pcbComponentError && <p className="snapshot-error" role="alert">{pcbComponentError}</p>}
+            <p className="panel-note">Read-only Phase 7 inspection uses the validated snapshot document type, UUID, tab ID, and exactly one selected primitive ID. It does not modify, create, delete, save, move, or rotate geometry.</p>
+          </div>
+
+          <div className="panel-section">
             <span className="eyebrow">CURRENT PROJECT DOCUMENTS</span>
             <div className="setting-row"><span>Project</span><strong className="truncate-value">{projectDocuments?.project?.friendlyName ?? '—'}</strong></div>
             <div className="setting-row"><span>Documents</span><strong>{projectDocuments?.documents.length ?? 0}</strong></div>
@@ -556,7 +662,7 @@ export default function App() {
               <select
                 className="editor-tab-select"
                 value={editorState?.activeTabId ?? ''}
-                disabled={gatewayState !== 'connected' || interactionBusy || snapshotState === 'loading' || !editorState?.tabs.length}
+                disabled={gatewayState !== 'connected' || interactionBusy || snapshotState !== 'ready' || !snapshot?.document || !editorState?.tabs.length}
                 onChange={(event) => void activateEditorTab(event.target.value)}
               >
                 {!editorState?.activeTabId && <option value="">No active tab</option>}
@@ -611,7 +717,7 @@ export default function App() {
                 {selectionBusy ? 'Syncing…' : 'Clear EasyEDA selection'}
               </button>
             </div>
-            <p className="panel-note">Selection writes use only validated IDs already read from EasyEDA. State is read back after every successful mutation.</p>
+            <p className="panel-note">Selection writes require the same validated document type, UUID, and tab ID that produced the snapshot. Trusted state is invalidated before each write and restored only by a successful read-back.</p>
           </div>
 
           <div className="panel-section">
@@ -629,7 +735,7 @@ export default function App() {
             </div>
             <div className="setting-row"><span>Mode</span><strong>{connectionMode === 'cloud' ? 'Cloudflare' : 'Direct'}</strong></div>
             {connectionMode === 'cloud' && <div className="setting-row"><span>Session</span><strong>{cloudSession || 'default'}</strong></div>}
-            <div className="setting-row"><span>VPS relay</span><strong>{yesNoUnknown(gatewayStatus.vpsConnected)}</strong></div>
+            <div className="setting-row"><span>PC companion</span><strong>{yesNoUnknown(gatewayStatus.vpsConnected)}</strong></div>
             <div className="setting-row"><span>EasyEDA</span><strong>{yesNoUnknown(gatewayStatus.edaConnected)}</strong></div>
             {gatewayStatus.localBridgePort && (
               <div className="setting-row"><span>Bridge</span><strong>:{gatewayStatus.localBridgePort}</strong></div>

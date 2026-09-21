@@ -9,8 +9,7 @@ Branch in progress: `feat/editor-navigation`
 Base: `main`
 Phase 4 PR: `#4` merged
 Phase 4 merge commit: `84b59faff36af02ea4e33aba8f7eb806873b46a4`
-Phase 4 final head: `c96f0455c56bf60d53ac1920d75f9056a7dc1605`
-Phase 4 final CI: run `35594979703` — success
+Phase 5 PR: `#6` open
 
 This file is the operational handoff. Continue work from this file first, not from chat memory.
 
@@ -69,13 +68,14 @@ EasyEDA Pro on VPS
 
 Add non-destructive iPad control over the EasyEDA editor itself before introducing geometry/property mutations.
 
-Scope for this phase:
+Implemented scope:
 
-- Read the currently open editor tab/split-screen state.
+- Read currently open editor tab/split-screen state.
 - Identify the active EasyEDA tab.
 - Activate an already-open EasyEDA document tab.
 - Fit all primitives in a validated tab.
 - Fit the current selection in a validated tab.
+- Refresh document snapshot after tab activation so the inspector follows the new active document.
 
 Explicitly out of scope:
 
@@ -99,7 +99,7 @@ Namespace: `eda.dmt_EditorControl`
 - `zoomToAllPrimitives(tabId?: string): Promise<{ left: number; right: number; top: number; bottom: number } | false>`
 - `zoomToSelectedPrimitives(tabId?: string): Promise<{ left: number; right: number; top: number; bottom: number } | false>`
 
-Current active tab is correlated using the already-verified:
+Current active tab is correlated using:
 
 - `eda.dmt_SelectControl.getCurrentDocumentInfo()`
 
@@ -128,8 +128,11 @@ Relevant official data contracts:
 - Tab titles are limited to 128 characters.
 - All external EasyEDA editor state is schema-validated before UI use.
 - Tab IDs sent back to EasyEDA are trimmed, non-empty, length-bounded, and serialized with `JSON.stringify`.
+- The iPad UI can only select tab IDs already present in validated editor state.
 - Phase 5 navigation operations never call save/open/close/move/split-screen mutation APIs.
 - Tab activation reads back fresh editor state before it is trusted locally.
+- After a successful tab activation, the PWA refreshes the EasyEDA document snapshot; if that second read fails, stale document state is discarded rather than shown as current.
+- Fit Selection is disabled when the validated document snapshot has no selection.
 - Viewport fit commands do not change PCB/schematic document data.
 
 ## Phase 5 implementation status
@@ -144,20 +147,50 @@ Relevant official data contracts:
 - [x] Add `EasyEdaEditorApi.fitAll(tabId)`.
 - [x] Add `EasyEdaEditorApi.fitSelection(tabId)`.
 - [x] Add tests for command generation, tab-ID serialization/validation, bounded editor-state validation, activation read-back, and fit-selection behavior.
-- [ ] Open Phase 5 PR and run CI on the current API/test head.
-- [ ] Fix any CI/typecheck/test failures before UI integration.
-- [ ] Add iPad Editor Navigation UI only after API/tests are green.
-- [ ] Refresh both editor state and EasyEDA snapshot after tab activation.
-- [ ] Disable Fit Selection when no validated selection exists.
-- [ ] Update README for Phase 5 behavior.
-- [ ] Bump package version to `0.5.0` after Phase 5 UI is complete.
-- [ ] Run final CI and merge only if the exact latest head is green and mergeable.
+- [x] Open Phase 5 PR #6.
+- [x] API/test foundation passed CI before UI integration.
+- [x] Add iPad Editor Navigation UI.
+- [x] Refresh both editor state and EasyEDA snapshot after tab activation.
+- [x] Disable Fit Selection when no validated selection exists.
+- [x] UI head `91ddf5fb3697d6f5aec5153e73a142c1d296fa48` passed CI run `35597290757` including tests, PWA build, Worker typecheck, Wrangler validation, direct companion syntax, and VPS cloud-agent syntax.
+- [x] Update README for Phase 5 behavior.
+- [x] Bump package version to `0.5.0`.
+- [ ] Verify CI on the exact latest documentation/version/HANDOFF head.
+- [ ] Merge PR #6 only if that exact head is green and mergeable.
+- [ ] After merge, start a new branch/HANDOFF loop for the next narrowly-scoped capability.
 
-## Phase 5 files currently changed
+## Phase 5 files changed
 
 - `HANDOFF.md`
+- `README.md`
+- `package.json`
+- `src/App.tsx`
 - `src/lib/easyeda-editor.ts`
 - `src/lib/easyeda-editor.test.ts`
+
+## CI history
+
+### Phase 5 API/test foundation
+
+The API/test foundation completed tests, web build, and Worker typecheck successfully before the UI was added.
+
+### Phase 5 UI head
+
+Head: `91ddf5fb3697d6f5aec5153e73a142c1d296fa48`
+Run: `35597290757`
+Conclusion: `success`
+
+Passed:
+
+- dependency installation
+- EasyEDA command-layer tests
+- PWA TypeScript/Vite build
+- Worker type generation/typecheck
+- Wrangler deploy dry-run/config validation
+- direct companion syntax check
+- VPS cloud-agent syntax check
+
+README/version/HANDOFF commits were added after that successful UI run, so the exact latest head still requires a final green CI run before merge.
 
 ## Safety / correctness rules carried forward
 
@@ -178,4 +211,4 @@ At each meaningful milestone:
 
 ## Next action
 
-Open a Phase 5 PR from `feat/editor-navigation` to `main`, let CI validate the new editor API/tests, inspect the exact head result, fix failures if any, then proceed to the Editor Navigation UI only after that head is green.
+Identify the exact latest PR #6 head after README/package/HANDOFF updates, verify its GitHub Actions CI run is `success`, confirm PR #6 is mergeable, then merge. After merge, create a new branch for the next capability instead of extending this PR.

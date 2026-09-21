@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useCanvasViewport } from './hooks/useCanvasViewport';
+import { EasyEdaApi, EASYEDA_DOCUMENT_TYPE, type EasyEdaSnapshot } from './lib/easyeda-api';
 import { EasyEdaGatewayClient, type GatewayState, type GatewayStatus } from './lib/gateway';
 
 const tools = [
@@ -12,6 +13,7 @@ const tools = [
 
 type ToolId = (typeof tools)[number]['id'];
 type ConnectionMode = 'cloud' | 'direct';
+type SnapshotState = 'idle' | 'loading' | 'ready' | 'error';
 
 function stateLabel(state: GatewayState) {
   if (state === 'connected') return 'Connected';
@@ -23,6 +25,24 @@ function stateLabel(state: GatewayState) {
 function yesNoUnknown(value: boolean | undefined) {
   if (value === undefined) return 'Unknown';
   return value ? 'Online' : 'Offline';
+}
+
+function documentTypeLabel(documentType: number | undefined) {
+  if (documentType === EASYEDA_DOCUMENT_TYPE.SCHEMATIC_PAGE) return 'Schematic page';
+  if (documentType === EASYEDA_DOCUMENT_TYPE.PCB) return 'PCB';
+  if (documentType === EASYEDA_DOCUMENT_TYPE.FOOTPRINT) return 'Footprint';
+  if (documentType === undefined) return 'No document';
+  return `Type ${documentType}`;
+}
+
+function contextName(snapshot: EasyEdaSnapshot | null) {
+  if (!snapshot) return null;
+  if (snapshot.context.kind === 'pcb') return snapshot.context.name ?? 'PCB';
+  if (snapshot.context.kind === 'schematic') {
+    return snapshot.context.page?.name ?? snapshot.context.schematic?.name ?? 'Schematic';
+  }
+  if (snapshot.context.kind === 'footprint') return 'Footprint';
+  return null;
 }
 
 function cloudSocketUrl(session: string, token: string) {
@@ -37,6 +57,7 @@ function cloudSocketUrl(session: string, token: string) {
 
 export default function App() {
   const gateway = useMemo(() => new EasyEdaGatewayClient(), []);
+  const easyeda = useMemo(() => new EasyEdaApi(gateway), [gateway]);
   const [gatewayState, setGatewayState] = useState<GatewayState>('disconnected');
   const [gatewayStatus, setGatewayStatus] = useState<GatewayStatus>({});
   const [connectionMode, setConnectionMode] = useState<ConnectionMode>(() => (
@@ -46,11 +67,20 @@ export default function App() {
   const [cloudSession, setCloudSession] = useState(() => localStorage.getItem('easyeda-ipad-session') ?? 'default');
   const [cloudToken, setCloudToken] = useState(() => sessionStorage.getItem('easyeda-ipad-token') ?? '');
   const [activeTool, setActiveTool] = useState<ToolId>('select');
+  const [snapshot, setSnapshot] = useState<EasyEdaSnapshot | null>(null);
+  const [snapshotState, setSnapshotState] = useState<SnapshotState>('idle');
+  const [snapshotError, setSnapshotError] = useState<string | null>(null);
   const { zoom, offset, inputMode, resetView, handlers } = useCanvasViewport();
 
   useEffect(() => {
     const onStateChange = (event: Event) => {
-      setGatewayState((event as CustomEvent<GatewayState>).detail);
+      const next = (event as CustomEvent<GatewayState>).detail;
+      setGatewayState(next);
+      if (next !== 'connected') {
+        setSnapshot(null);
+        setSnapshotState('idle');
+        setSnapshotError(null);
+      }
     };
     const onStatusChange = (event: Event) => {
       const next = (event as CustomEvent<GatewayStatus>).detail;
@@ -105,6 +135,23 @@ export default function App() {
     gateway.connect(url);
   };
 
+  const refreshSnapshot = async () => {
+    if (gatewayState !== 'connected' || snapshotState === 'loading') return;
+    setSnapshotState('loading');
+    setSnapshotError(null);
+    try {
+      const next = await easyeda.getSnapshot();
+      setSnapshot(next);
+      setSnapshotState('ready');
+    } catch (error) {
+      setSnapshotState('error');
+      setSnapshotError(error instanceof Error ? error.message : 'Unable to read EasyEDA state');
+    }
+  };
+
+  const projectTitle = snapshot?.project?.friendlyName ?? contextName(snapshot) ?? 'EasyEDA workspace';
+  const firstSelectedId = snapshot?.selection.ids[0];
+
   return (
     <main className="app-shell">
       <header className="topbar">
@@ -118,13 +165,18 @@ export default function App() {
 
         <div className="project-pill">
           <span className="eyebrow">PROJECT</span>
-          <strong>Untitled board</strong>
+          <strong>{projectTitle}</strong>
         </div>
 
         <div className="top-actions">
-          <button className="icon-button" type="button" aria-label="Undo">↶</button>
-          <button className="icon-button" type="button" aria-label="Redo">↷</button>
-          <button className="primary-button" type="button">Save</button>
+          <button
+            className="primary-button"
+            type="button"
+            onClick={() => void refreshSnapshot()}
+            disabled={gatewayState !== 'connected' || snapshotState === 'loading'}
+          >
+            {snapshotState === 'loading' ? 'Refreshing…' : 'Refresh from EasyEDA'}
+          </button>
         </div>
       </header>
 
@@ -158,18 +210,18 @@ export default function App() {
               style={{ transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})` }}
             >
               <div className="demo-board">
-                <div className="board-title">PCB WORKSPACE</div>
+                <div className="board-title">READ-ONLY WORKSPACE PREVIEW</div>
                 <div className="component component-a">
-                  <span>U1</span>
-                  <strong>RP2040</strong>
+                  <span>LIVE STATE</span>
+                  <strong>{documentTypeLabel(snapshot?.document?.documentType)}</strong>
                 </div>
                 <div className="component component-b">
-                  <span>J1</span>
-                  <strong>USB</strong>
+                  <span>SELECTION</span>
+                  <strong>{snapshot?.selection.total ?? 0} items</strong>
                 </div>
                 <div className="component component-c">
-                  <span>U2</span>
-                  <strong>ESP-12F</strong>
+                  <span>CONTEXT</span>
+                  <strong>{contextName(snapshot) ?? 'Not refreshed'}</strong>
                 </div>
                 <svg className="demo-traces" viewBox="0 0 760 420" aria-hidden="true">
                   <path d="M210 195 H330 V115 H445" />
@@ -253,17 +305,36 @@ export default function App() {
         <aside className="inspector">
           <div className="panel-heading">
             <div>
-              <span className="eyebrow">INSPECTOR</span>
-              <h2>Selection</h2>
+              <span className="eyebrow">EASYEDA STATE</span>
+              <h2>{contextName(snapshot) ?? 'Not refreshed'}</h2>
             </div>
-            <span className="selection-chip">U1</span>
+            <span className="selection-chip">{snapshot?.selection.total ?? 0} selected</span>
           </div>
 
-          <div className="field-grid">
-            <label>X <input value="42.00" readOnly /></label>
-            <label>Y <input value="28.00" readOnly /></label>
-            <label>Rotation <input value="0°" readOnly /></label>
-            <label>Layer <input value="Top" readOnly /></label>
+          <div className="panel-section snapshot-section">
+            <span className="eyebrow">DOCUMENT</span>
+            <div className="setting-row"><span>Type</span><strong>{documentTypeLabel(snapshot?.document?.documentType)}</strong></div>
+            <div className="setting-row"><span>Document</span><strong className="truncate-value">{snapshot?.document?.uuid ?? '—'}</strong></div>
+            <div className="setting-row"><span>Project</span><strong className="truncate-value">{snapshot?.project?.friendlyName ?? '—'}</strong></div>
+            <div className="setting-row"><span>Selected</span><strong>{snapshot?.selection.total ?? 0}</strong></div>
+            {firstSelectedId && (
+              <div className="setting-row"><span>First ID</span><strong className="truncate-value">{firstSelectedId}</strong></div>
+            )}
+            {snapshot && (
+              <div className="setting-row">
+                <span>Captured</span>
+                <strong>{new Date(snapshot.capturedAt).toLocaleTimeString()}</strong>
+              </div>
+            )}
+            {snapshotError && <p className="snapshot-error" role="alert">{snapshotError}</p>}
+            <button
+              className="secondary-button wide"
+              type="button"
+              onClick={() => void refreshSnapshot()}
+              disabled={gatewayState !== 'connected' || snapshotState === 'loading'}
+            >
+              {snapshotState === 'loading' ? 'Reading EasyEDA…' : 'Refresh from EasyEDA'}
+            </button>
           </div>
 
           <div className="panel-section">
@@ -295,8 +366,8 @@ export default function App() {
 
       <footer className="statusbar">
         <span>Tool: {activeTool}</span>
-        <span>Grid 0.25 mm</span>
-        <span>X 42.00 · Y 28.00</span>
+        <span>Read-only EasyEDA snapshot</span>
+        <span>{snapshot ? `${snapshot.selection.total} selected` : 'No snapshot'}</span>
         <span className={`status-dot-wrap status-${gatewayState}`}><i />{stateLabel(gatewayState)}</span>
       </footer>
     </main>

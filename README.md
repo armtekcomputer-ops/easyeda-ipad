@@ -46,7 +46,71 @@ The VPS initiates the Internet connection to Cloudflare. You do **not** need to 
 - VPS outbound WebSocket cloud agent
 - Automatic scan of the official local bridge ports `49620-49629`
 - Direct/LAN companion mode retained as a fallback
-- GitHub Actions build and Worker validation
+- Typed, read-only EasyEDA Pro document snapshot integration
+- Validated current document/project/PCB/schematic/selection state
+- Bounded selection payloads before data is rendered on iPad
+- GitHub Actions tests, build, Worker typecheck, and Wrangler validation
+
+## Phase 3: read-only EasyEDA state
+
+After connecting the PWA, tap **Refresh from EasyEDA**. The PWA sends a narrowly-scoped read command through the existing secure relay and displays a validated snapshot containing:
+
+- current editor document type and document UUID
+- current project identity/name when available
+- current PCB metadata when a PCB is active
+- current schematic and schematic-page metadata when a schematic page is active
+- selected primitive IDs
+- a bounded shallow scalar summary of selected primitive objects
+
+The first integration is intentionally read-only. It does **not** call save, clear selection, select primitives, move/rotate, wire/route, undo, or redo APIs.
+
+The typed command layer lives in:
+
+```text
+src/lib/easyeda-api.ts
+```
+
+Safety limits currently applied to every snapshot:
+
+- selected IDs: maximum 100 returned to the browser
+- primitive summaries: maximum 20
+- primitive summary fields: maximum 16 shallow scalar fields
+- summary strings: maximum 256 characters
+- returned data is schema-validated in the browser before UI rendering
+
+The command-generation and validation behavior is covered by Vitest:
+
+```bash
+npm test
+```
+
+### Official APIs used by the current snapshot
+
+Current document/project:
+
+```text
+eda.dmt_SelectControl.getCurrentDocumentInfo()
+eda.dmt_Project.getCurrentProjectInfo()
+```
+
+PCB:
+
+```text
+eda.dmt_Pcb.getCurrentPcbInfo()
+eda.pcb_SelectControl.getAllSelectedPrimitives_PrimitiveId()
+eda.pcb_SelectControl.getAllSelectedPrimitives()
+```
+
+Schematic:
+
+```text
+eda.dmt_Schematic.getCurrentSchematicInfo()
+eda.dmt_Schematic.getCurrentSchematicPageInfo()
+eda.sch_SelectControl.getAllSelectedPrimitives_PrimitiveId()
+eda.sch_SelectControl.getAllSelectedPrimitives()
+```
+
+These names were verified against the official `easyeda/easyeda-api-skill` reference. The project does not guess undocumented method names. In particular, no public undo/redo API was found in the current official reference, so undo/redo is not implemented.
 
 ## Requirements
 
@@ -76,6 +140,12 @@ Local PWA development:
 
 ```bash
 npm run dev
+```
+
+Tests:
+
+```bash
+npm test
 ```
 
 Build:
@@ -199,14 +269,16 @@ Prefer a systemd credentials mechanism or protected environment file instead of 
 4. Enter the same session used by the VPS agent, normally `default`.
 5. Enter `IPAD_TOKEN`.
 6. Tap **Connect**.
+7. Tap **Refresh from EasyEDA** to read the current EasyEDA document state.
 
 The token is not compiled into the PWA. The current UI keeps the iPad token in browser `sessionStorage`, so it is cleared when that browser session is discarded.
 
-The inspector reports three independent states:
+The inspector reports three independent connection states plus the latest validated EasyEDA snapshot:
 
 - PWA -> Cloudflare gateway connection
 - Cloudflare -> VPS agent connection
 - VPS agent -> local EasyEDA bridge connection
+- current document/project/context/selection snapshot
 
 ## Session model
 
@@ -280,10 +352,11 @@ EasyEDA API execution is powerful. Treat the relay as a privileged control path.
 - The Worker rejects invalid session names and WebSocket role tokens.
 - Execute payloads are limited to 128 KiB.
 - The relay does not intentionally log tokens or execute payload contents.
+- EasyEDA values returned to the PWA are treated as untrusted and validated before rendering.
 
 ## Current scope
 
-The transport and iPad interaction shell are now structured for VPS + Cloudflare operation. The PCB/schematic shown in the workspace remains a UI prototype; Phase 3 needs to map the touch tools and panels to supported EasyEDA Pro APIs.
+The transport, Cloudflare/VPS deployment path, iPad interaction shell, and first real EasyEDA read-only state integration are implemented. The visual PCB/schematic canvas is still a touch-oriented preview rather than a full remote clone of the EasyEDA editor. Editing commands will be added incrementally only after their public EasyEDA APIs are verified.
 
 ## Handoff workflow
 

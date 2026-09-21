@@ -5,10 +5,10 @@ Last updated: 2026-09-21 (Asia/Bangkok)
 ## Project source of truth
 
 Repository: `armtekcomputer-ops/easyeda-ipad`
-Branch in progress: `feat/easyeda-api-integration`
+Branch in progress: `feat/selection-sync`
 Base: `main`
-PR: `#3`
-Phase 2 merge commit: `8e95794f8189edf2cd064145afb874a2bf21152a`
+PR: `#4`
+Phase 3 merge commit: `ee30dad2c0e67fe3adc65b1c2ca31627bd17c5c5`
 
 This file is the operational handoff. Continue work from this file first, not from chat memory.
 
@@ -19,10 +19,7 @@ iPad PWA
   |
   | HTTPS/WSS
   v
-Cloudflare Worker + Static Assets
-  |
-  v
-Durable Object session relay
+Cloudflare Worker + Durable Object relay
   ^
   | outbound WSS
   |
@@ -36,97 +33,132 @@ EasyEDA bridge 127.0.0.1:49620-49629
 EasyEDA Pro on VPS
 ```
 
-## Phase 3 goal
+## Completed through Phase 3
 
-Replace the demo-only workspace behavior with real EasyEDA Pro API-backed operations, beginning with a strictly read-only state snapshot.
+- Cloudflare-hosted PWA and Durable Object relay.
+- VPS outbound cloud agent and Direct/LAN fallback.
+- Typed `EasyEdaApi` command layer over the existing gateway transport.
+- Read-only snapshot of current document/project/PCB/schematic/selection state.
+- Browser-side validation and bounded primitive summaries.
+- `Refresh from EasyEDA` UI.
+- Tests and CI green; PR #3 merged.
 
-The existing `gateway.execute(code)` transport remains the execution path. PWA code calls a typed command layer that emits narrowly-scoped EasyEDA API snippets and validates every response before rendering.
+## Phase 4 goal
 
-## Verified official EasyEDA API surface
+Add the first narrowly-scoped write capability: selection synchronization between iPad and the active EasyEDA editor.
 
-Verified from the official `easyeda/easyeda-api-skill` API references/examples.
+This phase stays limited to selection state. Do not add move/rotate/property edits/routing/save/undo/redo here.
 
-### Current document / project
+## Verified official selection mutation API
 
-- `eda.dmt_SelectControl.getCurrentDocumentInfo()`
-- `eda.dmt_Project.getCurrentProjectInfo()`
+Verified from the official `easyeda/easyeda-api-skill` references.
 
-Verified editor document types used:
+### PCB / footprint
 
-- `SCHEMATIC_PAGE = 1`
-- `PCB = 3`
-- `FOOTPRINT = 4`
+Namespace: `eda.pcb_SelectControl`
 
-### PCB metadata
+- `clearSelected(): Promise<boolean>`
+  - BETA
+  - clears the active PCB/footprint selection
+- `doSelectPrimitives(primitiveIds: string | Array<string>): Promise<boolean>`
+  - BETA
+  - selects primitives by primitive ID
 
-- `eda.dmt_Pcb.getCurrentPcbInfo()`
-- normalized fields: `uuid`, `name`, `parentProjectUuid`, optional `parentBoardName`
+### Schematic / symbol
 
-### Schematic metadata
+Namespace: `eda.sch_SelectControl`
 
-- `eda.dmt_Schematic.getCurrentSchematicInfo()`
-- `eda.dmt_Schematic.getCurrentSchematicPageInfo()`
-- normalized schematic fields: `uuid`, `name`, `parentProjectUuid`, optional `parentBoardName`
-- normalized page fields: `uuid`, `name`, `parentSchematicUuid`
+- `clearSelected(): boolean`
+  - synchronous return
+- `doSelectPrimitives(primitiveIds: string | Array<string>): Promise<boolean>`
+  - selects primitives by primitive ID
 
-### Selection
+### Active document dispatch
 
-PCB/footprint namespace: `eda.pcb_SelectControl`
+The selection control classes are documented for their editor domains (`PCB & footprint` and `Schematic & symbol`) and expose no document argument. Existing official guidance requires the correct document to be active before using a domain API. Phase 4 dispatches based on `eda.dmt_SelectControl.getCurrentDocumentInfo()` inside the same execute request as the mutation, avoiding a race with tab changes and avoiding invented selector arguments.
 
-- `getAllSelectedPrimitives_PrimitiveId()`
-- `getAllSelectedPrimitives()`
+Supported document types for mutation in this phase:
 
-Schematic namespace: `eda.sch_SelectControl`
+- `SCHEMATIC_PAGE = 1` -> `eda.sch_SelectControl`
+- `PCB = 3` -> `eda.pcb_SelectControl`
+- `FOOTPRINT = 4` -> `eda.pcb_SelectControl`
 
-- `getAllSelectedPrimitives_PrimitiveId()`
-- `getAllSelectedPrimitives()`
+Other document types fail before mutation.
 
-Selection mutation APIs exist but are deliberately disabled in this milestone.
+## Selection event research
 
-### Undo / redo
+Official event classes exist, including PCB cross-probe/primitive events and SCH primitive events. The official reference states these listeners are extension-only and calling them from a standalone script environment always throws an error.
 
-No public undo/redo API was found in the current official API-skill references. Do not implement or guess it.
+The current gateway executes standalone code through `/execute`, so Phase 4 does not register these event listeners.
 
-## Phase 3 implementation
+Decision: after every successful selection mutation, explicitly call `getSnapshot()` and use that validated read-back as the UI source of truth. No polling or guessed event API.
 
-- [x] Research official EasyEDA API names and supported operations.
-- [x] Add `src/lib/easyeda-api.ts` typed read-only command layer.
-- [x] Add `EasyEdaApi.getSnapshot()` using only verified read APIs.
-- [x] Normalize current document, project, PCB/schematic metadata, selected IDs, and selected primitive summaries.
-- [x] Cap selected IDs at 100 and primitive summaries at 20.
-- [x] Limit primitive summaries to shallow scalar fields only, max 16 fields and 256 characters per string.
-- [x] Validate every returned snapshot in the browser before rendering.
-- [x] Add Vitest command-generation/validation tests.
-- [x] Add `npm test` to CI.
-- [x] Wire snapshot refresh/state into the PWA UI.
-- [x] Replace misleading top-level write controls with `Refresh from EasyEDA` for this read-only milestone.
-- [x] Show document type, project/context, selection count/first ID, and capture timestamp.
-- [x] Surface API/validation errors without showing tokens or generated code.
-- [x] Open PR #3.
-- [x] First PR #3 CI run (`35592936289`) passed tests, PWA build, Worker typecheck, Wrangler dry-run, and both companion syntax checks.
-- [x] Update README with Phase 3 behavior and verified API list.
-- [ ] Verify CI on the latest documentation/HANDOFF head.
-- [ ] Merge PR #3 when latest head is green.
+## Phase 4 implementation status
 
-## Files changed in Phase 3
+- [x] Record exact verified selection mutation signatures in this HANDOFF.
+- [x] Add `EasyEdaApi.clearSelection()` with in-command current-document dispatch.
+- [x] Add `EasyEdaApi.selectPrimitiveIds(ids)` with conservative validation and ID count limit.
+- [x] Maximum request is 100 primitive IDs.
+- [x] IDs are trimmed, must be non-empty strings, max 256 characters, and are de-duplicated in order.
+- [x] Generated selection code embeds only `JSON.stringify` output from the validated ID array.
+- [x] Mutation command returns a compact versioned result with `operation`, `ok`, `documentType`, `requested`, and bounded failure reason.
+- [x] Browser validates the mutation result before trusting it.
+- [x] Successful mutation immediately calls `getSnapshot()` and returns the fresh validated snapshot.
+- [x] Failed/unsupported mutation does not perform a read-back or update assumed local state.
+- [x] Add tests covering exact verified API calls, JSON serialization, input limits, trimming/deduplication, malformed results, read-back after success, and unsupported-document failure.
+- [x] Add iPad Selection Sync controls using only validated snapshot IDs.
+- [x] UI does not accept arbitrary typed primitive IDs.
+- [x] Selection controls are disabled while disconnected, refreshing, mutating, unsupported, or when the requested action has no IDs/selection.
+- [x] Successful UI mutation replaces local snapshot state only with the fresh validated read-back returned by `EasyEdaApi`.
+- [x] Mutation failures use the existing sanitized snapshot/API error display.
+- [x] Add inspector styling for disabled actions, selection action grouping, bounded/truncated values, and API errors.
+- [x] Prefer explicit refresh because documented event listeners are extension-only.
+- [x] Open PR #4.
+- [x] First PR #4 CI run `35594764722` passed tests, PWA build, Worker typecheck, Wrangler dry-run, direct companion syntax, and VPS cloud-agent syntax.
+- [x] Update README with Phase 4 behavior and verified mutation APIs.
+- [x] Bump package version to `0.4.0`.
+- [ ] Verify CI on the latest README/version/HANDOFF head.
+- [ ] Merge PR #4 only when the latest head is green.
+
+## Files changed in Phase 4
 
 - `HANDOFF.md`
 - `README.md`
+- `package.json`
 - `src/lib/easyeda-api.ts`
-- `src/lib/easyeda-api.test.ts`
+- `src/lib/easyeda-selection.test.ts`
 - `src/App.tsx`
-- `package.json` (version `0.3.0`, Vitest/test script)
-- `.github/workflows/ci.yml` (runs tests before build)
+- `src/styles.css`
+
+## CI history
+
+### PR #4 run 1
+
+GitHub Actions run `35594764722` completed successfully on code/UI head `0dd444f6bd423e651f597856978488c25d6f6441`.
+
+Passed:
+
+- dependency installation
+- EasyEDA command-layer tests
+- PWA TypeScript/Vite build
+- Worker type generation/typecheck
+- Wrangler deploy dry-run / config validation
+- direct companion syntax check
+- VPS cloud-agent syntax check
+
+Documentation/version/HANDOFF commits were added after that run, so the latest head must still receive a green CI result before merge.
 
 ## Safety / correctness rules
 
-- Use only documented EasyEDA public APIs or APIs explicitly exposed by the official SDK/skill.
-- Do not guess API method names.
-- Start read-only before adding writes.
-- Keep generated execute snippets short and deterministic.
-- Never include Cloudflare/VPS secrets inside generated EasyEDA code.
-- Treat all returned EasyEDA values as untrusted structured data and validate before rendering.
-- Bound selected object data returned to the browser; avoid transporting an unbounded whole-document object graph.
+- Use only exact documented public APIs from official EasyEDA repositories/references.
+- Never guess method names or argument shapes.
+- Maximum selection request: 100 primitive IDs.
+- Every ID must be a trimmed, non-empty string no longer than 256 characters.
+- Duplicate IDs are removed before execution.
+- Generated code embeds IDs using `JSON.stringify` output from the validated array; never concatenate IDs into quoted source fragments.
+- No secrets or gateway URLs in generated EasyEDA code.
+- If document type is unsupported, fail without mutation.
+- After write success, read state back through `getSnapshot()` rather than assuming local state.
 
 ## Loop rule
 
@@ -138,4 +170,4 @@ At each meaningful milestone:
 
 ## Next action
 
-Re-read this HANDOFF. Check GitHub Actions for the latest branch head after README/HANDOFF changes. If green, verify PR #3 mergeability and squash-merge it into `main`. Then start a fresh branch/HANDOFF loop for the next verified capability rather than adding writes to this read-only PR.
+Re-read this HANDOFF, identify the latest PR #4 head SHA after README/package/HANDOFF updates, wait for its GitHub Actions CI run, and merge PR #4 only if that exact head is green and mergeable. After merge, start a new branch/HANDOFF loop for the next capability rather than extending this selection-only PR.

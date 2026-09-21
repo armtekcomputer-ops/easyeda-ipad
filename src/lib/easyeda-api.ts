@@ -8,6 +8,7 @@ const MAX_SELECTED_IDS = 100;
 const MAX_SELECTED_SUMMARIES = 20;
 const MAX_SUMMARY_FIELDS = 16;
 const MAX_SUMMARY_STRING = 256;
+const MAX_SELECTION_ID_LENGTH = 256;
 
 export type EasyEdaDocumentSummary = {
   documentType: number;
@@ -77,6 +78,18 @@ export type EasyEdaSnapshot = {
   project: EasyEdaProjectSummary | null;
   context: EasyEdaContext;
   selection: EasyEdaSelectionSummary;
+};
+
+export type EasyEdaSelectionMutationOperation = 'clear' | 'select';
+export type EasyEdaSelectionMutationFailure = 'no-document' | 'unsupported-document' | 'mutation-failed';
+
+export type EasyEdaSelectionMutationResult = {
+  version: 1;
+  operation: EasyEdaSelectionMutationOperation;
+  ok: boolean;
+  documentType: number | null;
+  requested: number;
+  reason?: EasyEdaSelectionMutationFailure;
 };
 
 export interface EasyEdaExecutor {
@@ -340,11 +353,130 @@ return snapshot;
 `.trim();
 }
 
+export function normalizeEasyEdaPrimitiveIds(ids: readonly string[]): string[] {
+  if (!Array.isArray(ids)) throw new Error('Selection IDs must be an array');
+  if (ids.length === 0) throw new Error('Select at least one primitive ID');
+  if (ids.length > MAX_SELECTED_IDS) throw new Error(`Selection is limited to ${MAX_SELECTED_IDS} primitive IDs`);
+
+  const unique = new Set<string>();
+  for (const id of ids) {
+    if (typeof id !== 'string') throw new Error('Every primitive ID must be a string');
+    if (id.length > MAX_SELECTION_ID_LENGTH) {
+      throw new Error(`Primitive IDs are limited to ${MAX_SELECTION_ID_LENGTH} characters`);
+    }
+    const trimmed = id.trim();
+    if (!trimmed) throw new Error('Primitive IDs cannot be empty');
+    unique.add(trimmed);
+  }
+
+  return [...unique];
+}
+
+function mutationResultCode(
+  operation: EasyEdaSelectionMutationOperation,
+  documentTypeExpression: string,
+  requested: number,
+  successExpression: string,
+): string {
+  return `({ version: 1, operation: '${operation}', ok: ${successExpression} === true, documentType: ${documentTypeExpression}, requested: ${requested}, ...(${successExpression} === true ? {} : { reason: 'mutation-failed' }) })`;
+}
+
+export function buildEasyEdaClearSelectionCode(): string {
+  return `
+const doc = await eda.dmt_SelectControl.getCurrentDocumentInfo();
+const documentType = doc?.documentType ?? null;
+if (documentType === ${EASYEDA_DOCUMENT_TYPE.PCB} || documentType === ${EASYEDA_DOCUMENT_TYPE.FOOTPRINT}) {
+  const ok = await eda.pcb_SelectControl.clearSelected();
+  return ${mutationResultCode('clear', 'documentType', 0, 'ok')};
+}
+if (documentType === ${EASYEDA_DOCUMENT_TYPE.SCHEMATIC_PAGE}) {
+  const ok = eda.sch_SelectControl.clearSelected();
+  return ${mutationResultCode('clear', 'documentType', 0, 'ok')};
+}
+return { version: 1, operation: 'clear', ok: false, documentType, requested: 0, reason: doc ? 'unsupported-document' : 'no-document' };
+`.trim();
+}
+
+export function buildEasyEdaSelectPrimitiveIdsCode(ids: readonly string[]): string {
+  const primitiveIds = normalizeEasyEdaPrimitiveIds(ids);
+  const serializedIds = JSON.stringify(primitiveIds);
+  return `
+const primitiveIds = ${serializedIds};
+const doc = await eda.dmt_SelectControl.getCurrentDocumentInfo();
+const documentType = doc?.documentType ?? null;
+if (documentType === ${EASYEDA_DOCUMENT_TYPE.PCB} || documentType === ${EASYEDA_DOCUMENT_TYPE.FOOTPRINT}) {
+  const ok = await eda.pcb_SelectControl.doSelectPrimitives(primitiveIds);
+  return ${mutationResultCode('select', 'documentType', primitiveIds.length, 'ok')};
+}
+if (documentType === ${EASYEDA_DOCUMENT_TYPE.SCHEMATIC_PAGE}) {
+  const ok = await eda.sch_SelectControl.doSelectPrimitives(primitiveIds);
+  return ${mutationResultCode('select', 'documentType', primitiveIds.length, 'ok')};
+}
+return { version: 1, operation: 'select', ok: false, documentType, requested: primitiveIds.length, reason: doc ? 'unsupported-document' : 'no-document' };
+`.trim();
+}
+
+export function parseEasyEdaSelectionMutationResult(value: unknown): EasyEdaSelectionMutationResult {
+  if (!isRecord(value)) throw new Error('Invalid EasyEDA selection result: root must be an object');
+  if (value.version !== 1) throw new Error('Invalid EasyEDA selection result: unsupported version');
+  if (value.operation !== 'clear' && value.operation !== 'select') {
+    throw new Error('Invalid EasyEDA selection result: operation is invalid');
+  }
+  if (typeof value.ok !== 'boolean') throw new Error('Invalid EasyEDA selection result: ok must be boolean');
+  if (value.documentType !== null && (typeof value.documentType !== 'number' || !Number.isInteger(value.documentType))) {
+    throw new Error('Invalid EasyEDA selection result: documentType is invalid');
+  }
+  if (typeof value.requested !== 'number' || !Number.isInteger(value.requested) || value.requested < 0 || value.requested > MAX_SELECTED_IDS) {
+    throw new Error('Invalid EasyEDA selection result: requested is invalid');
+  }
+
+  let reason: EasyEdaSelectionMutationFailure | undefined;
+  if (value.reason !== undefined) {
+    if (value.reason !== 'no-document' && value.reason !== 'unsupported-document' && value.reason !== 'mutation-failed') {
+      throw new Error('Invalid EasyEDA selection result: reason is invalid');
+    }
+    reason = value.reason;
+  }
+
+  if (value.ok && reason !== undefined) throw new Error('Invalid EasyEDA selection result: successful result cannot include a failure reason');
+  if (!value.ok && reason === undefined) throw new Error('Invalid EasyEDA selection result: failed result requires a reason');
+
+  return {
+    version: 1,
+    operation: value.operation,
+    ok: value.ok,
+    documentType: value.documentType,
+    requested: value.requested,
+    reason,
+  };
+}
+
+function mutationFailureMessage(result: EasyEdaSelectionMutationResult): string {
+  if (result.reason === 'no-document') return 'No active EasyEDA document is available for selection';
+  if (result.reason === 'unsupported-document') return `Selection is not supported for EasyEDA document type ${result.documentType ?? 'unknown'}`;
+  return `EasyEDA ${result.operation} selection operation failed`;
+}
+
 export class EasyEdaApi {
   constructor(private readonly executor: EasyEdaExecutor) {}
 
   async getSnapshot(): Promise<EasyEdaSnapshot> {
     const value = await this.executor.execute<unknown>(buildEasyEdaSnapshotCode());
     return parseEasyEdaSnapshot(value);
+  }
+
+  async clearSelection(): Promise<EasyEdaSnapshot> {
+    const value = await this.executor.execute<unknown>(buildEasyEdaClearSelectionCode());
+    const result = parseEasyEdaSelectionMutationResult(value);
+    if (!result.ok) throw new Error(mutationFailureMessage(result));
+    return this.getSnapshot();
+  }
+
+  async selectPrimitiveIds(ids: readonly string[]): Promise<EasyEdaSnapshot> {
+    const code = buildEasyEdaSelectPrimitiveIdsCode(ids);
+    const value = await this.executor.execute<unknown>(code);
+    const result = parseEasyEdaSelectionMutationResult(value);
+    if (!result.ok) throw new Error(mutationFailureMessage(result));
+    return this.getSnapshot();
   }
 }

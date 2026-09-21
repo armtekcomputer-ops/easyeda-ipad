@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useCanvasViewport } from './hooks/useCanvasViewport';
 import { EasyEdaApi, EASYEDA_DOCUMENT_TYPE, type EasyEdaSnapshot } from './lib/easyeda-api';
 import { EasyEdaEditorApi, type EasyEdaEditorState } from './lib/easyeda-editor';
+import { EasyEdaPcbComponentApi, type EasyEdaPcbComponentState } from './lib/easyeda-pcb-component';
 import {
   EasyEdaProjectDocumentsApi,
   type EasyEdaCurrentProjectDocuments,
@@ -52,6 +53,11 @@ function selectionDocumentSupported(documentType: number | undefined) {
     || documentType === EASYEDA_DOCUMENT_TYPE.FOOTPRINT;
 }
 
+function pcbComponentInspectionSupported(documentType: number | undefined) {
+  return documentType === EASYEDA_DOCUMENT_TYPE.PCB
+    || documentType === EASYEDA_DOCUMENT_TYPE.FOOTPRINT;
+}
+
 function contextName(snapshot: EasyEdaSnapshot | null) {
   if (!snapshot) return null;
   if (snapshot.context.kind === 'pcb') return snapshot.context.name ?? 'PCB';
@@ -77,6 +83,7 @@ export default function App() {
   const easyeda = useMemo(() => new EasyEdaApi(gateway), [gateway]);
   const safeSelection = useMemo(() => new EasyEdaSafeSelectionApi(gateway), [gateway]);
   const editor = useMemo(() => new EasyEdaEditorApi(gateway), [gateway]);
+  const pcbComponentApi = useMemo(() => new EasyEdaPcbComponentApi(gateway), [gateway]);
   const projectDocumentsApi = useMemo(() => new EasyEdaProjectDocumentsApi(gateway), [gateway]);
   const [gatewayState, setGatewayState] = useState<GatewayState>('disconnected');
   const [gatewayStatus, setGatewayStatus] = useState<GatewayStatus>({});
@@ -94,6 +101,9 @@ export default function App() {
   const [editorState, setEditorState] = useState<EasyEdaEditorState | null>(null);
   const [editorBusy, setEditorBusy] = useState(false);
   const [editorError, setEditorError] = useState<string | null>(null);
+  const [pcbComponent, setPcbComponent] = useState<EasyEdaPcbComponentState | null>(null);
+  const [pcbComponentBusy, setPcbComponentBusy] = useState(false);
+  const [pcbComponentError, setPcbComponentError] = useState<string | null>(null);
   const [projectDocuments, setProjectDocuments] = useState<EasyEdaCurrentProjectDocuments | null>(null);
   const [projectDocumentsBusy, setProjectDocumentsBusy] = useState(false);
   const [projectDocumentsError, setProjectDocumentsError] = useState<string | null>(null);
@@ -103,6 +113,8 @@ export default function App() {
   const invalidateTrustedState = (message: string) => {
     setSnapshot(null);
     setEditorState(null);
+    setPcbComponent(null);
+    setPcbComponentError(null);
     setProjectDocuments(null);
     setSelectedProjectDocumentUuid('');
     setSnapshotState('error');
@@ -119,6 +131,8 @@ export default function App() {
         setSnapshotError(null);
         setEditorState(null);
         setEditorError(null);
+        setPcbComponent(null);
+        setPcbComponentError(null);
         setProjectDocuments(null);
         setProjectDocumentsError(null);
         setSelectedProjectDocumentUuid('');
@@ -147,6 +161,11 @@ export default function App() {
   }, [projectDocuments]);
 
   useEffect(() => {
+    setPcbComponent(null);
+    setPcbComponentError(null);
+  }, [snapshot?.capturedAt]);
+
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) return;
       if (event.key === '1') setActiveTool('select');
@@ -158,7 +177,7 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [resetView]);
 
-  const interactionBusy = selectionBusy || editorBusy || projectDocumentsBusy;
+  const interactionBusy = selectionBusy || editorBusy || pcbComponentBusy || projectDocumentsBusy;
   const canConnect = connectionMode === 'cloud'
     ? Boolean(cloudSession.trim() && cloudToken.trim())
     : Boolean(gatewayUrl.trim());
@@ -192,6 +211,7 @@ export default function App() {
     setSnapshotState('loading');
     setSnapshotError(null);
     setEditorError(null);
+    setPcbComponentError(null);
     setProjectDocumentsError(null);
     try {
       const [nextSnapshot, nextEditorState, nextProjectDocuments] = await Promise.all([
@@ -206,6 +226,7 @@ export default function App() {
     } catch (error) {
       setSnapshot(null);
       setEditorState(null);
+      setPcbComponent(null);
       setProjectDocuments(null);
       setSnapshotState('error');
       setSnapshotError(error instanceof Error ? error.message : 'Unable to read EasyEDA state');
@@ -216,6 +237,8 @@ export default function App() {
     if (gatewayState !== 'connected' || interactionBusy || snapshotState !== 'ready' || !snapshot?.document) return;
     setSelectionBusy(true);
     setSnapshot(null);
+    setPcbComponent(null);
+    setPcbComponentError(null);
     setSnapshotState('loading');
     setSnapshotError(null);
     try {
@@ -250,6 +273,8 @@ export default function App() {
     setEditorBusy(true);
     setEditorError(null);
     setSnapshotError(null);
+    setPcbComponent(null);
+    setPcbComponentError(null);
     setProjectDocumentsError(null);
     setSnapshot(null);
     setEditorState(null);
@@ -289,6 +314,32 @@ export default function App() {
     }
   };
 
+  const inspectSelectedPcbComponent = async () => {
+    const document = snapshot?.document;
+    const ids = snapshot?.selection.ids ?? [];
+    if (
+      gatewayState !== 'connected'
+      || interactionBusy
+      || snapshotState !== 'ready'
+      || !document
+      || !pcbComponentInspectionSupported(document.documentType)
+      || ids.length !== 1
+    ) return;
+
+    setPcbComponentBusy(true);
+    setPcbComponent(null);
+    setPcbComponentError(null);
+    try {
+      const next = await pcbComponentApi.inspectSelectedComponent(document, ids[0]);
+      setPcbComponent(next);
+    } catch (error) {
+      setPcbComponent(null);
+      setPcbComponentError(error instanceof Error ? error.message : 'Unable to inspect the selected PCB component');
+    } finally {
+      setPcbComponentBusy(false);
+    }
+  };
+
   const openCurrentProjectDocument = async () => {
     const documentUuid = selectedProjectDocumentUuid;
     const trustedDocuments = projectDocuments;
@@ -299,6 +350,8 @@ export default function App() {
     setProjectDocumentsError(null);
     setEditorError(null);
     setSnapshotError(null);
+    setPcbComponent(null);
+    setPcbComponentError(null);
     setSnapshot(null);
     setEditorState(null);
     setProjectDocuments(null);
@@ -330,11 +383,18 @@ export default function App() {
     ?? 'EasyEDA workspace';
   const firstSelectedId = snapshot?.selection.ids[0];
   const selectionSupported = selectionDocumentSupported(snapshot?.document?.documentType);
+  const componentInspectionSupported = pcbComponentInspectionSupported(snapshot?.document?.documentType);
   const selectionControlsDisabled = gatewayState !== 'connected'
     || interactionBusy
     || snapshotState !== 'ready'
     || !snapshot?.document
     || !selectionSupported;
+  const componentInspectorDisabled = gatewayState !== 'connected'
+    || interactionBusy
+    || snapshotState !== 'ready'
+    || !snapshot?.document
+    || !componentInspectionSupported
+    || snapshot.selection.ids.length !== 1;
   const editorControlsDisabled = gatewayState !== 'connected'
     || interactionBusy
     || snapshotState !== 'ready'
@@ -430,7 +490,7 @@ export default function App() {
               <div className="gateway-card" onPointerDown={(event) => event.stopPropagation()}>
                 <span className="eyebrow">CONNECTION</span>
                 <h2>Connect to EasyEDA</h2>
-                <p>Cloud mode connects this PWA through Cloudflare to the outbound VPS agent. Direct mode keeps the original LAN companion option.</p>
+                <p>Cloud mode connects this PWA through Cloudflare to the outbound PC companion running beside EasyEDA Pro. Direct mode keeps the original LAN companion option.</p>
 
                 <label>
                   Mode
@@ -438,7 +498,7 @@ export default function App() {
                     value={connectionMode}
                     onChange={(event) => setConnectionMode(event.target.value as ConnectionMode)}
                   >
-                    <option value="cloud">Cloudflare + VPS</option>
+                    <option value="cloud">Cloudflare + PC companion</option>
                     <option value="direct">Direct / LAN companion</option>
                   </select>
                 </label>
@@ -530,6 +590,35 @@ export default function App() {
             >
               {snapshotState === 'loading' ? 'Reading EasyEDA…' : 'Refresh from EasyEDA'}
             </button>
+          </div>
+
+          <div className="panel-section">
+            <span className="eyebrow">SELECTED PCB COMPONENT</span>
+            <div className="setting-row"><span>Document</span><strong>{componentInspectionSupported ? 'PCB / footprint' : 'Unavailable'}</strong></div>
+            <div className="setting-row"><span>Selection</span><strong>{snapshot?.selection.ids.length === 1 ? 'Exactly one' : 'Select one component'}</strong></div>
+            <button
+              className="secondary-button wide"
+              type="button"
+              onClick={() => void inspectSelectedPcbComponent()}
+              disabled={componentInspectorDisabled}
+            >
+              {pcbComponentBusy ? 'Inspecting…' : 'Inspect selected component'}
+            </button>
+            {pcbComponent && (
+              <>
+                <div className="setting-row"><span>Designator</span><strong className="truncate-value">{pcbComponent.designator || '—'}</strong></div>
+                <div className="setting-row"><span>Name</span><strong className="truncate-value">{pcbComponent.name || '—'}</strong></div>
+                <div className="setting-row"><span>Primitive ID</span><strong className="truncate-value">{pcbComponent.primitiveId}</strong></div>
+                <div className="setting-row"><span>X (mil)</span><strong>{pcbComponent.x.toLocaleString()}</strong></div>
+                <div className="setting-row"><span>Y (mil)</span><strong>{pcbComponent.y.toLocaleString()}</strong></div>
+                <div className="setting-row"><span>Rotation</span><strong>{pcbComponent.rotation}°</strong></div>
+                <div className="setting-row"><span>Layer</span><strong>{pcbComponent.layer === 'top' ? 'Top' : 'Bottom'}</strong></div>
+                <div className="setting-row"><span>Locked</span><strong>{pcbComponent.primitiveLock ? 'Yes' : 'No'}</strong></div>
+                <div className="setting-row"><span>Captured</span><strong>{new Date(pcbComponent.capturedAt).toLocaleTimeString()}</strong></div>
+              </>
+            )}
+            {pcbComponentError && <p className="snapshot-error" role="alert">{pcbComponentError}</p>}
+            <p className="panel-note">Read-only Phase 7 inspection uses the validated snapshot document type, UUID, tab ID, and exactly one selected primitive ID. It does not modify, create, delete, save, move, or rotate geometry.</p>
           </div>
 
           <div className="panel-section">
@@ -646,7 +735,7 @@ export default function App() {
             </div>
             <div className="setting-row"><span>Mode</span><strong>{connectionMode === 'cloud' ? 'Cloudflare' : 'Direct'}</strong></div>
             {connectionMode === 'cloud' && <div className="setting-row"><span>Session</span><strong>{cloudSession || 'default'}</strong></div>}
-            <div className="setting-row"><span>VPS relay</span><strong>{yesNoUnknown(gatewayStatus.vpsConnected)}</strong></div>
+            <div className="setting-row"><span>PC companion</span><strong>{yesNoUnknown(gatewayStatus.vpsConnected)}</strong></div>
             <div className="setting-row"><span>EasyEDA</span><strong>{yesNoUnknown(gatewayStatus.edaConnected)}</strong></div>
             {gatewayStatus.localBridgePort && (
               <div className="setting-row"><span>Bridge</span><strong>:{gatewayStatus.localBridgePort}</strong></div>

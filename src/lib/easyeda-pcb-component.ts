@@ -1,9 +1,11 @@
-import type { EasyEdaExecutor } from './easyeda-api';
+import type { EasyEdaDocumentSummary, EasyEdaExecutor } from './easyeda-api';
 
 const MAX_PRIMITIVE_ID_LENGTH = 256;
 const MAX_COMPONENT_TEXT_LENGTH = 128;
+const MAX_DOCUMENT_ID_LENGTH = 256;
 
 export type EasyEdaPcbComponentLayer = 'top' | 'bottom';
+export type EasyEdaPcbComponentDocumentIdentity = Pick<EasyEdaDocumentSummary, 'documentType' | 'uuid' | 'tabId'>;
 
 export type EasyEdaPcbComponentState = {
   version: 1;
@@ -20,6 +22,7 @@ export type EasyEdaPcbComponentState = {
 
 export type EasyEdaPcbComponentInspectFailure =
   | 'unsupported-document'
+  | 'document-changed'
   | 'selection-mismatch'
   | 'not-component'
   | 'invalid-component-state';
@@ -43,6 +46,27 @@ export function normalizeEasyEdaPrimitiveId(primitiveId: string): string {
     throw new Error(`EasyEDA primitive ID is limited to ${MAX_PRIMITIVE_ID_LENGTH} characters`);
   }
   return trimmed;
+}
+
+export function normalizeEasyEdaPcbComponentDocumentIdentity(
+  document: EasyEdaPcbComponentDocumentIdentity,
+): EasyEdaPcbComponentDocumentIdentity {
+  if (!document || typeof document !== 'object') throw new Error('Trusted EasyEDA document identity is required');
+  if (document.documentType !== 3 && document.documentType !== 4) {
+    throw new Error('PCB component inspection requires a trusted PCB or footprint document');
+  }
+  if (typeof document.uuid !== 'string' || !document.uuid.trim() || document.uuid.length > MAX_DOCUMENT_ID_LENGTH) {
+    throw new Error('Trusted EasyEDA document UUID is invalid');
+  }
+  if (typeof document.tabId !== 'string' || !document.tabId.trim() || document.tabId.length > MAX_DOCUMENT_ID_LENGTH) {
+    throw new Error('Trusted EasyEDA tab ID is invalid');
+  }
+
+  return {
+    documentType: document.documentType,
+    uuid: document.uuid.trim(),
+    tabId: document.tabId.trim(),
+  };
 }
 
 function parseOptionalText(value: unknown, label: string): string | undefined {
@@ -99,6 +123,7 @@ export function parseEasyEdaPcbComponentInspectResult(value: unknown): EasyEdaPc
   if (value.reason !== undefined) {
     if (
       value.reason !== 'unsupported-document'
+      && value.reason !== 'document-changed'
       && value.reason !== 'selection-mismatch'
       && value.reason !== 'not-component'
       && value.reason !== 'invalid-component-state'
@@ -119,15 +144,28 @@ export function parseEasyEdaPcbComponentInspectResult(value: unknown): EasyEdaPc
   return { version: 1, ok: value.ok, component, reason };
 }
 
-export function buildEasyEdaInspectSelectedPcbComponentCode(expectedPrimitiveId: string): string {
+export function buildEasyEdaInspectSelectedPcbComponentCode(
+  expectedDocument: EasyEdaPcbComponentDocumentIdentity,
+  expectedPrimitiveId: string,
+): string {
+  const document = normalizeEasyEdaPcbComponentDocumentIdentity(expectedDocument);
   const primitiveId = normalizeEasyEdaPrimitiveId(expectedPrimitiveId);
+  const serializedDocument = JSON.stringify(document);
   const serializedPrimitiveId = JSON.stringify(primitiveId);
 
   return `
+const expectedDocument = ${serializedDocument};
 const expectedPrimitiveId = ${serializedPrimitiveId};
 const currentDocument = await eda.dmt_SelectControl.getCurrentDocumentInfo();
 if (!currentDocument || (currentDocument.documentType !== 3 && currentDocument.documentType !== 4)) {
   return { version: 1, ok: false, component: null, reason: 'unsupported-document' };
+}
+if (
+  currentDocument.documentType !== expectedDocument.documentType
+  || currentDocument.uuid !== expectedDocument.uuid
+  || currentDocument.tabId !== expectedDocument.tabId
+) {
+  return { version: 1, ok: false, component: null, reason: 'document-changed' };
 }
 const selectedIds = await eda.pcb_SelectControl.getAllSelectedPrimitives_PrimitiveId();
 if (!Array.isArray(selectedIds) || selectedIds.length !== 1 || selectedIds[0] !== expectedPrimitiveId) {
@@ -184,6 +222,7 @@ return {
 
 function inspectFailureMessage(result: EasyEdaPcbComponentInspectResult): string {
   if (result.reason === 'unsupported-document') return 'PCB component inspection is available only for PCB or footprint documents';
+  if (result.reason === 'document-changed') return 'The active EasyEDA document changed; refresh before inspecting the component';
   if (result.reason === 'selection-mismatch') return 'The EasyEDA selection changed; refresh before inspecting the component';
   if (result.reason === 'not-component') return 'The selected PCB primitive is not a component/device';
   return 'EasyEDA returned invalid PCB component state';
@@ -192,8 +231,13 @@ function inspectFailureMessage(result: EasyEdaPcbComponentInspectResult): string
 export class EasyEdaPcbComponentApi {
   constructor(private readonly executor: EasyEdaExecutor) {}
 
-  async inspectSelectedComponent(expectedPrimitiveId: string): Promise<EasyEdaPcbComponentState> {
-    const value = await this.executor.execute<unknown>(buildEasyEdaInspectSelectedPcbComponentCode(expectedPrimitiveId));
+  async inspectSelectedComponent(
+    expectedDocument: EasyEdaPcbComponentDocumentIdentity,
+    expectedPrimitiveId: string,
+  ): Promise<EasyEdaPcbComponentState> {
+    const value = await this.executor.execute<unknown>(
+      buildEasyEdaInspectSelectedPcbComponentCode(expectedDocument, expectedPrimitiveId),
+    );
     const result = parseEasyEdaPcbComponentInspectResult(value);
     if (!result.ok || result.component === null) throw new Error(inspectFailureMessage(result));
     return result.component;

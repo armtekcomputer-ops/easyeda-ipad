@@ -47,72 +47,59 @@ EasyEDA Pro on VPS
 
 ## Phase 3 goal
 
-Replace the demo-only workspace behavior with real EasyEDA Pro API-backed operations.
+Replace the demo-only workspace behavior with real EasyEDA Pro API-backed operations, beginning with a strictly read-only state snapshot.
 
-The browser must never receive arbitrary privileged EasyEDA internals directly. The existing `gateway.execute(code)` transport remains the execution path, but PWA code calls a typed command layer that emits narrowly-scoped EasyEDA API snippets.
+The existing `gateway.execute(code)` transport remains the execution path. PWA code calls a typed command layer that emits narrowly-scoped EasyEDA API snippets and validates every response before rendering.
 
 ## Verified official EasyEDA API surface
 
-Verified from the official `easyeda/easyeda-api-skill` API references and examples. Do not rename or infer alternatives.
+Verified from the official `easyeda/easyeda-api-skill` API references/examples.
 
 ### Current document / project
 
 - `eda.dmt_SelectControl.getCurrentDocumentInfo()`
-  - returns `IDMT_EditorDocumentItem | undefined`
-  - verified properties: `documentType`, `uuid`, `tabId`, optional `parentProjectUuid`, optional `parentLibraryUuid`
-  - API is marked BETA
 - `eda.dmt_Project.getCurrentProjectInfo()`
-  - returns `IDMT_ProjectItem | undefined`
 
-Verified `EDMT_EditorDocumentType` values needed for first integration:
+Verified editor document types used:
 
 - `SCHEMATIC_PAGE = 1`
 - `PCB = 3`
 - `FOOTPRINT = 4`
-- other enum values exist; unknown/unhandled values remain numeric
 
-### PCB document metadata
+### PCB metadata
 
-- `eda.dmt_Pcb.getCurrentPcbInfo()` -> `IDMT_PcbItem | undefined`
-- verified fields used by our normalizer: `uuid`, `name`, `parentProjectUuid`, optional `parentBoardName`
+- `eda.dmt_Pcb.getCurrentPcbInfo()`
+- normalized fields: `uuid`, `name`, `parentProjectUuid`, optional `parentBoardName`
 
-### Schematic document metadata
+### Schematic metadata
 
 - `eda.dmt_Schematic.getCurrentSchematicInfo()`
 - `eda.dmt_Schematic.getCurrentSchematicPageInfo()`
-- verified schematic fields used: `uuid`, `name`, `parentProjectUuid`, optional `parentBoardName`
-- verified page fields used: `uuid`, `name`, `parentSchematicUuid`
+- normalized schematic fields: `uuid`, `name`, `parentProjectUuid`, optional `parentBoardName`
+- normalized page fields: `uuid`, `name`, `parentSchematicUuid`
 
-### Selection — PCB / footprint
+### Selection
 
-Namespace: `eda.pcb_SelectControl`.
-
-Read APIs used:
+PCB/footprint namespace: `eda.pcb_SelectControl`
 
 - `getAllSelectedPrimitives_PrimitiveId()`
 - `getAllSelectedPrimitives()`
 
-Verified write APIs exist (`clearSelected`, `doSelectPrimitives`, `doCrossProbeSelect`) but remain disabled in this milestone.
-
-### Selection — schematic
-
-Namespace: `eda.sch_SelectControl`.
-
-Read APIs used:
+Schematic namespace: `eda.sch_SelectControl`
 
 - `getAllSelectedPrimitives_PrimitiveId()`
 - `getAllSelectedPrimitives()`
 
-Verified write APIs exist but remain disabled.
+Selection mutation APIs exist but are deliberately disabled in this milestone.
 
 ### Primitive/property access
 
 - Schematic generic getter exists: `eda.sch_Primitive.getPrimitiveByPrimitiveId(id)`.
-- PCB `PCB_Primitive` current reference does not expose a generic equivalent, so the first milestone uses selected primitive objects returned by `pcb_SelectControl`.
+- PCB `PCB_Primitive` reference currently has no generic `getPrimitiveByPrimitiveId`; current snapshot uses selected primitive objects returned by `pcb_SelectControl`.
 
-### Undo / redo status
+### Undo / redo
 
-No public undo/redo API was found in the current official API-skill reference. Do not implement or guess it.
+No public undo/redo API was found in the current official API-skill references. Do not implement or guess it.
 
 ## Phase 3 implementation completed on current branch
 
@@ -125,15 +112,20 @@ No public undo/redo API was found in the current official API-skill reference. D
 - [x] Validate every returned snapshot in the browser before rendering.
 - [x] Add Vitest command-generation/validation tests.
 - [x] Add `npm test` to CI.
-- [ ] Wire snapshot refresh/state into the PWA UI.
+- [x] Wire snapshot refresh/state into the PWA UI.
+- [x] Replace misleading write controls in the top bar with a read-only `Refresh from EasyEDA` action for this milestone.
+- [x] Show live snapshot document type, project/context name, selection count/first ID, and capture timestamp in the inspector.
+- [x] Surface API/validation errors as UI state without showing tokens or generated execute code.
 - [ ] Run CI on a PR and fix failures.
-- [ ] Update README and merge first read-only integration when green.
+- [ ] Update README with Phase 3 read-only behavior.
+- [ ] Merge first read-only integration when green.
 
-## Files changed in Phase 3 so far
+## Files changed in Phase 3
 
 - `HANDOFF.md`
 - `src/lib/easyeda-api.ts`
 - `src/lib/easyeda-api.test.ts`
+- `src/App.tsx`
 - `package.json` (version `0.3.0`, Vitest/test script)
 - `.github/workflows/ci.yml` (runs tests before build)
 
@@ -157,4 +149,4 @@ At each meaningful milestone:
 
 ## Next action
 
-Re-read this HANDOFF, then update the PWA to instantiate `EasyEdaApi` over the existing gateway, add a `Refresh from EasyEDA` action available only when connected, show document/project/context/selection snapshot status in the inspector, and surface validation/API errors without exposing secrets or raw execute code.
+Re-read this HANDOFF, open a Phase 3 PR, let GitHub Actions run tests + TypeScript/Vite + Worker/Wrangler validation, fix all failures on this branch, then update README/HANDOFF and merge only when the current head is green.

@@ -2,6 +2,18 @@
 
 Last updated: 2026-09-21 (Asia/Bangkok)
 
+## Multi-chat coordination — 2026-09-21
+
+Read [WORKBOARD.md](WORKBOARD.md) on remote `main` before choosing or editing any task. It is the shared source for chat ownership, reserved paths, pending work, dependencies, leases and checkpoints. [AGENTS.md](AGENTS.md) makes this the entry workflow for future coding chats.
+
+Every chat must register a unique chat ID, atomically claim its task/write paths using the current board SHA, verify the saved claim, work on a separate branch, and update its checkpoint before pausing or finishing. Re-read main before resuming; an expired lease requires reconciliation and does not automatically authorize takeover. Never merge stale branch copies of the board.
+
+Current observation: PR #8 (`feat/pcb-component-inspector`) is open and titled “feat: harden trusted EasyEDA state and move relay to PC companion”; its observed head is `d6d8a6213d1504d8e63e0e7b373a969711b34b1d`. PR #5 is also still open. Their chat identities are unknown until self-registration. The board records both to prevent duplicate work. An open PR is not a capability merged into main; architecture and R1–R8 completion must be reconciled from the actual diff and checks.
+
+This task adds coordination documentation only. Earlier “STOP after documentation review” and Phase 7 checkboxes below describe that review's scope/snapshot, not a global prohibition on later user-authorized work. For future work, follow the latest user instruction, refresh main/open PRs, and claim the matching board task first. Do not start a duplicate Phase 7 branch from the historical checklist.
+
+At each milestone: update your board checkpoint; update this handoff for verified product changes; re-read both before continuing. Chat status is cooperative and only as current as its latest published update; no automatic cross-chat monitoring is installed.
+
 ## Project source of truth
 
 Repository: `armtekcomputer-ops/easyeda-ipad`

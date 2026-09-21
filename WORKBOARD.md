@@ -181,9 +181,17 @@ CORE-008 and OPS-001 reservations remain released.
 ## COORD-002 current reconciliation
 
 - Owner/run: `chatgpt-auto-easyeda-20260921T180639Z`; owner family: `chatgpt-auto-easyeda`.
-- State: claimed; source issue: #17.
+- State: review; source issue: #17.
 - Reserved exact paths: `HANDOFF.md`; `WORKBOARD.md` coordination updates only. Preserve unrelated owners and records.
-- Branch: `work/COORD-002/chatgpt-auto-easyeda-20260921T180639Z` (to create).
+- Branch: `work/COORD-002/chatgpt-auto-easyeda-20260921T180639Z`.
 - Scope: reconcile verified merged PRs #9/#10/#13/#14/#15 and superseded #5; record open EDIT-006 #19 and pending LIVE-001 #18. No application code.
 - Existing reservations remain held until main HANDOFF is synchronized and a fresh board update explicitly releases them.
 - Next: prepare HANDOFF correction on task branch and open a draft PR; keep WORKBOARD updates on remote main only.
+
+### COORD-002 checkpoint — 2026-09-21T18:09:06Z
+
+- Run: `chatgpt-auto-easyeda-20260921T180639Z`; no active edit batch remains.
+- Draft PR: #20; head: `1984167878d9f251ee00d2d4c47c441cddafef23`.
+- Checks: GitHub PR merge/head records verified; inspected diff is HANDOFF.md only (+30/-31). CI not yet verified; no live test.
+- Blocker/next: review PR #20 and check current-head CI; integrate only with applicable authorization, then synchronize this canonical board's task rows and release reconciled reservations. Do not recreate the PR. HANDOFF reservation retained through review.
+- Verified merged: #9/#10/#13/#14/#15. #5 closed without merge, superseded by #15. #19 remains open; LIVE-001 #18 still lacks live evidence. Historical task rows above are not ready-to-claim work; their reservations remain on reconciliation hold until main HANDOFF is synchronized.

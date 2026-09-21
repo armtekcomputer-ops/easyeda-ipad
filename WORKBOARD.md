@@ -1,7 +1,7 @@
 # Shared multi-chat work board
 
 Canonical source: `armtekcomputer-ops/easyeda-ipad`, branch `main`, path `WORKBOARD.md`.
-Updated: 2026-09-21T15:03:00Z. All timestamps use UTC ISO 8601.
+Updated: 2026-09-21T15:09:00Z. All timestamps use UTC ISO 8601.
 This file tracks ownership and unfinished work; `HANDOFF.md` tracks verified product state and decisions.
 
 ## Required workflow
@@ -31,7 +31,7 @@ Use `blocked`, `paused`, or `needs_reconciliation` when appropriate. An expired 
 | chat-20260921T141000Z-agent2-view001 | Agent 2 — real-board viewer research | VIEW-001 | claimed | 2026-09-21T14:10:00Z | `work/VIEW-001/chat-20260921T141000Z-agent2-view001`; PR #9 | Complete research-only feasibility work without application-code changes |
 | chat-20260921T141500Z-agent3-ops001 | Agent 3 — PC companion deployment/runbook | OPS-001 | done | 2026-09-21T14:31:00Z | PR #11 merged as `a33f2d9ec66e993c69d1d1288bb579f83248a15b`; HANDOFF refreshed on main | No further OPS-001 work; reservation released |
 | chat-20260921T145300Z-agent3-recon008 | Agent 3 — PR #8 reconciliation reviewer | RECON-008 | done | 2026-09-21T14:57:00Z | review-only; PR review `5268152134`; no CORE-008 code writes | Findings transferred to active CORE-008 owner |
-| chat-20260921T150300Z-agent3-core008 | Agent 3 — CORE-008 takeover | CORE-008 | in_progress | 2026-09-21T15:03:00Z | inherited `feat/pcb-component-inspector`; head `d6d8a6213d1504d8e63e0e7b373a969711b34b1d`; PR #8 | Add document identity guard + regression tests, reconcile current main, run fresh exact-head CI |
+| chat-20260921T150300Z-agent3-core008 | Agent 3 — CORE-008 takeover | CORE-008 | in_progress | 2026-09-21T15:09:00Z | `feat/pcb-component-inspector`; head `a3063ec2693de6b207a1a6bbefac2f0ee26786cd`; PR #8 | Fresh exact-head CI run `35616679777` in progress; review result then move to review/merge-ready or fix failures |
 | unknown-pr5 | Existing PR author/chat not yet registered | EDIT-005 | needs_reconciliation | observed 2026-09-21T13:57:50Z | `feat/primitive-transform`; head observed `4180c2f98191fed082927255d57f6372d4b9425b`; PR #5 | Reconcile before any transform integration |
 
 ## Tasks
@@ -39,7 +39,7 @@ Use `blocked`, `paused`, or `needs_reconciliation` when appropriate. An expired 
 | ID | Priority | Deliverable | State | Owner | Dependency / evidence / next step |
 | --- | --- | --- | --- | --- | --- |
 | COORD-001 | P1 | Shared coordination protocol | done | chat-20260921-coordination-142684dc | Delivered on main |
-| CORE-008 | P1 | Reconcile PR #8 trusted-state corrections, PC companion migration, Phase 7 foundation | in_progress | chat-20260921T150300Z-agent3-core008 | User explicitly authorized takeover after prior agent disconnected. R1-R4 hardening present. Add expected `documentType + uuid + tabId` guard and regression test to Phase 7 inspector, then reconcile current main and run fresh exact-head CI before merge. |
+| CORE-008 | P1 | Reconcile PR #8 trusted-state corrections, PC companion migration, Phase 7 foundation | in_progress | chat-20260921T150300Z-agent3-core008 | Document identity guard + regression tests added. PR #8 reconciled with main and is ahead 16 / behind 0; diff contains only 10 CORE-008 application files. Fresh exact-head CI run `35616679777` is in progress on `a3063ec2693de6b207a1a6bbefac2f0ee26786cd`. |
 | RECON-008 | P1 | Read-only reconciliation/review of PR #8 against current main | done | chat-20260921T145300Z-agent3-recon008 | Review `5268152134` published; findings handed to active CORE-008 owner. |
 | REL-005 | P2 | R5 connection deadlines/recovery/status + R6 bounded pending requests | blocked | unassigned | Wait for CORE-008 integration; claim only residual gaps. R5 still lacks handshake deadline/pong watchdog/automatic recovery; R6 still lacks TTL/max in-flight cleanup for `pendingRelayIds`. |
 | BUILD-008 | P2 | Deterministic npm install/CI lockfile | review | chat-20260921T135900Z-agent1-build008 | PR #10 head `fb8712a9e222f465d086d5e9d87f14a6188b6427`; CI run `35610185239` success |
@@ -105,22 +105,25 @@ Use `blocked`, `paused`, or `needs_reconciliation` when appropriate. An expired 
 - current-main delta since PR merge-base: only `AGENTS.md`, `HANDOFF.md`, `WORKBOARD.md`, `docs/DEPLOYMENT_PC_COMPANION.md`; no application-code overlap observed
 - confirmed R1 selection identity guard, R2 trusted-state invalidation, R3 service-worker API bypass, and R4 envelope validation are present in PR #8
 - Phase 7 component inspector is read-only and mutation APIs are absent from its tests
-- blocking correctness finding for Phase 7 UI: inspector does not compare live `uuid/tabId` against the trusted document identity; same primitive ID in another PCB/footprint could be read as if it were the original document
+- blocking correctness finding for Phase 7 UI was missing live `uuid/tabId` comparison; active CORE-008 owner has now added the identity guard and regression test on PR #8
 - deferred REL-005 findings remain: no gateway handshake deadline/pong watchdog/automatic recovery; `pendingRelayIds` has no TTL/max in-flight cleanup while bridge stays connected
 - legacy `vps` identifiers remain compatibility names; they do not imply a VPS requirement
 - no live iPad/EasyEDA validation performed by this review
-- next: active CORE-008 owner implements the guard and reconciles the PR
+- next: fresh exact-head CI on reconciled PR #8
 
 ## Checkpoint — CORE-008 takeover
 
 - task/chat: CORE-008 / `chat-20260921T150300Z-agent3-core008`
 - state: in_progress
-- inherited branch/head/PR: `feat/pcb-component-inspector` / `d6d8a6213d1504d8e63e0e7b373a969711b34b1d` / #8
+- branch/head/PR: `feat/pcb-component-inspector` / `a3063ec2693de6b207a1a6bbefac2f0ee26786cd` / #8
 - takeover reason: prior agent lost connection; user explicitly authorized this chat to continue PR #8
 - reservations: all existing CORE-008 paths transferred from `unknown-pr8`
-- first correction: add trusted document identity (`documentType + uuid + tabId`) to read-only PCB component inspection and regression-test document switching with the same primitive ID
-- integration requirement: reconcile current main and obtain fresh exact-head CI before merge
+- correction completed: trusted document identity (`documentType + uuid + tabId`) is validated before selection/component lookup, with same-primitive-ID document-switch regression coverage
+- main reconciliation: merge commit `a3063ec2693de6b207a1a6bbefac2f0ee26786cd`; branch now ahead 16 / behind 0
+- PR diff after reconciliation: only 10 CORE-008 application files; coordination/docs are inherited from main and not in PR diff
+- fresh exact-head CI: run `35616679777` in progress
 - live tested: no
+- remaining: inspect fresh CI; if green, update PR/board to review and seek explicit merge authorization
 
 ## Integration rules
 
@@ -148,3 +151,6 @@ Use `blocked`, `paused`, or `needs_reconciliation` when appropriate. An expired 
 - 2026-09-21T14:56:00Z — Confirmed current-main delta since PR #8 merge-base is coordination/docs only, with no application-code overlap.
 - 2026-09-21T14:57:00Z — Published PR #8 review `5268152134`; recorded Phase 7 document-identity correctness gap and completed RECON-008 without modifying CORE-008 code paths.
 - 2026-09-21T15:03:00Z — User reported the prior PR #8 agent disconnected and explicitly authorized Agent 3 to take over CORE-008; ownership and reservations transferred to `chat-20260921T150300Z-agent3-core008`.
+- 2026-09-21T15:05:00Z — Added Phase 7 trusted document identity guard and regression tests to PR #8.
+- 2026-09-21T15:07:00Z — Reconciled PR #8 with current main; branch became ahead 16 / behind 0 with only CORE-008 application files remaining in PR diff.
+- 2026-09-21T15:09:00Z — Fresh exact-head CI run `35616679777` observed in progress on `a3063ec2693de6b207a1a6bbefac2f0ee26786cd`.

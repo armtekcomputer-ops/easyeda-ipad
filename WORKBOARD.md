@@ -1,7 +1,7 @@
 # Shared multi-chat work board
 
 Canonical source: `armtekcomputer-ops/easyeda-ipad`, branch `main`, path `WORKBOARD.md`.
-Updated: 2026-09-21T15:54:00Z. All timestamps use UTC ISO 8601.
+Updated: 2026-09-21T16:02:00Z. All timestamps use UTC ISO 8601.
 This file tracks ownership and unfinished work; `HANDOFF.md` tracks verified product state and decisions.
 
 ## Required workflow
@@ -33,7 +33,7 @@ Use `blocked`, `paused`, or `needs_reconciliation` when appropriate. An expired 
 | chat-20260921T145300Z-agent3-recon008 | Agent 3 — PR #8 reconciliation reviewer | RECON-008 | done | 2026-09-21T14:57:00Z | review `5268152134` | Findings resolved by CORE-008 |
 | chat-20260921T150300Z-agent3-core008 | Agent 3 — CORE-008 takeover | CORE-008 | done | 2026-09-21T15:22:00Z | PR #8 merged as `45f3c607c274e8ccfa93e5687db489d57db1c31a` | Reservation released; residual reliability/testing/UX work can now be claimed |
 | chat-20260921T152500Z-agent3-rel005 | Agent 3 — transport reliability | REL-005 | done | 2026-09-21T15:50:00Z | PR #12 merged as `319d83c518fe1bf166b0e5339bea331d9bd0eb90`; final head `e6bc586e84c1b03fcdbac1f1e6d7630ee48cdb24` | Reservation released; TEST-008 can target merged protocol |
-| chat-20260921T155400Z-agent3-test008 | Agent 3 — transport behavior coverage | TEST-008 | in_progress | 2026-09-21T15:54:00Z | `work/TEST-008/chat-20260921T155400Z-agent3-test008` | Add broader auth/routing/disconnect/malformed/payload-bound tests against merged REL-005 protocol without package/CI changes |
+| chat-20260921T155400Z-agent3-test008 | Agent 3 — transport behavior coverage | TEST-008 | review | 2026-09-21T16:02:00Z | `work/TEST-008/chat-20260921T155400Z-agent3-test008`; head `a5052249ba636568615ff3b082218bcb5402e15c`; PR #13 | Exact-head CI `35622810269` green; merge only with explicit authorization after final main reconciliation |
 | unknown-pr5 | Existing PR author/chat not yet registered | EDIT-005 | needs_reconciliation | observed 2026-09-21T13:57:50Z | `feat/primitive-transform`; head observed `4180c2f98191fed082927255d57f6372d4b9425b`; PR #5 | Reconcile only after explicit editing-scope review |
 
 ## Tasks
@@ -45,7 +45,7 @@ Use `blocked`, `paused`, or `needs_reconciliation` when appropriate. An expired 
 | RECON-008 | P1 | Read-only reconciliation/review of PR #8 | done | chat-20260921T145300Z-agent3-recon008 | Completed before CORE-008 takeover |
 | REL-005 | P2 | R5 connection deadlines/recovery/status + R6 bounded pending requests | done | chat-20260921T152500Z-agent3-rel005 | PR #12 merged as `319d83c518fe1bf166b0e5339bea331d9bd0eb90`; final exact-head CI `35621474276` success on `e6bc586e84c1b03fcdbac1f1e6d7630ee48cdb24`; reservation released |
 | BUILD-008 | P2 | Deterministic npm install/CI lockfile | review | chat-20260921T135900Z-agent1-build008 | PR #10 head `fb8712a9e222f465d086d5e9d87f14a6188b6427`; CI `35610185239` success; merge requires explicit authorization |
-| TEST-008 | P2 | Transport behavior tests for auth/routing/disconnect/malformed/payload bounds | in_progress | chat-20260921T155400Z-agent3-test008 | Target merged REL-005. Cover Worker auth/routing envelope validation, direct/cloud companion envelope/auth helpers, browser disconnect/pending behavior, malformed frames, and byte bounds without touching BUILD-008 paths. |
+| TEST-008 | P2 | Transport behavior tests for auth/routing/disconnect/malformed/payload bounds | review | chat-20260921T155400Z-agent3-test008 | PR #13 head `a5052249ba636568615ff3b082218bcb5402e15c`; CI `35622810269` success with 80 tests. Worker auth/routing/envelope/byte-bound coverage and gateway disconnect/reply/malformed-frame coverage added; gateway now rejects >128 KiB execute code locally. |
 | UX-007 | P2 | Clearly mark preview and disable/hide unimplemented tools | todo | unassigned | `src/App.tsx` is available; claim before editing |
 | LIVE-001 | P1 | Actual iPad + live EasyEDA end-to-end validation | todo | unassigned | Integrated main candidate exists; requires real iPad, EasyEDA Pro, API Gateway, Worker/DO deployment and recorded versions/results |
 | VIEW-001 | P2 | Documented read-only real-board viewer feasibility research | claimed | chat-20260921T141000Z-agent2-view001 | PR #9; documentation/research only |
@@ -58,10 +58,10 @@ Use `blocked`, `paused`, or `needs_reconciliation` when appropriate. An expired 
 | --- | --- | --- | --- | --- |
 | BUILD-008 | chat-20260921T135900Z-agent1-build008 | `package.json`; `package-lock.json`; `.github/workflows/ci.yml` | retained through review | Integrate or explicitly abandon, synchronize HANDOFF/board, then release |
 | VIEW-001 | chat-20260921T141000Z-agent2-view001 | `docs/research/real-board-viewer.md` | retained while active | Research reaches review/done or explicit handoff |
-| TEST-008 | chat-20260921T155400Z-agent3-test008 | `src/lib/gateway.ts`; `src/lib/gateway.test.ts`; `worker/index.ts`; `worker/protocol.ts`; `worker/protocol.test.ts`; `companion/server.mjs`; `companion/cloud-agent.mjs`; `companion/protocol.mjs`; `companion/protocol.test.mjs` | active | PR reaches review/merge or explicit handoff; synchronize HANDOFF/board, then release |
+| TEST-008 | chat-20260921T155400Z-agent3-test008 | `src/lib/gateway.ts`; `src/lib/gateway.test.ts`; `worker/index.ts`; `worker/protocol.ts`; `worker/protocol.test.ts` | retained through review | Integrate PR #13 or explicitly abandon/handoff, synchronize HANDOFF/board, then release |
 | EDIT-005 | unknown-pr5 | Existing PR #5 transform diff | reconciliation hold | Review diff and resolve overlap before write/integration |
 
-REL-005 reservation is released as of 2026-09-21T15:50:00Z after PR #12 merge and HANDOFF synchronization. TEST-008 now owns the listed transport paths for broader protocol coverage.
+REL-005 reservation is released as of 2026-09-21T15:50:00Z after PR #12 merge and HANDOFF synchronization. TEST-008 narrowed its review reservation to the five files actually changed; companion files were not modified and are released.
 
 CORE-008 and OPS-001 reservations remain released.
 
@@ -97,13 +97,16 @@ CORE-008 and OPS-001 reservations remain released.
 ## Checkpoint — TEST-008
 
 - task/chat: TEST-008 / `chat-20260921T155400Z-agent3-test008`
-- state: in_progress
-- branch: `work/TEST-008/chat-20260921T155400Z-agent3-test008`
-- scope: broader transport auth/routing/disconnect/malformed/payload-bound coverage on merged REL-005 protocol
-- implementation strategy: extract only side-effect-free protocol/auth parsing helpers needed for meaningful tests; production behavior remains equivalent except for any directly proven boundary gap covered by regression test
-- package/lockfile/CI files remain reserved by BUILD-008 and are out of scope
-- live tested: no
-- next: create branch from this claim commit, implement tests/helpers, run CI, open PR, move to review if green
+- state: review
+- branch/head/PR: `work/TEST-008/chat-20260921T155400Z-agent3-test008` / `a5052249ba636568615ff3b082218bcb5402e15c` / #13
+- changed files: `src/lib/gateway.ts`, `src/lib/gateway.test.ts`, `worker/index.ts`, `worker/protocol.ts`, `worker/protocol.test.ts`
+- Worker coverage: token equality, Bearer/query token selection, session/upgrade checks, route envelope round-trip/rejection, malformed status/envelope validation, UTF-8 frame/code bounds
+- gateway coverage: result/error ID routing, unrelated IDs ignored, pending rejection on disconnect, malformed/unknown/oversized inbound frames, peer ping/pong, existing REL-005 watchdog/reconnect behavior
+- boundary fix: browser rejects execute code above 128 KiB by UTF-8 bytes before sending; Worker limit is unchanged
+- exact-head CI: run `35622810269` succeeded; 9 test files / 80 tests passed, web build passed, Worker types/typecheck passed, Wrangler dry-run passed, companion syntax checks passed
+- live tested: no; CI is not live iPad/EasyEDA validation
+- reservation retained through review
+- next: explicit user merge authorization; refresh main/board and reconcile coordination-only drift before merge, rerunning exact-head CI if head changes
 
 ## Checkpoint — BUILD-008
 
@@ -126,7 +129,7 @@ CORE-008 and OPS-001 reservations remain released.
 
 - Verify final PR head and exact-head checks before integration.
 - Merge only under explicit user authorization.
-- Never merge stale `WORKBOARD.md` content from a feature branch.
+- Never merge stale branch copies of `WORKBOARD.md`.
 - After every merge, synchronize `HANDOFF.md` and this board with the actual merge SHA and unresolved work.
 - Do not claim CI as live iPad/EasyEDA validation.
 - Keep mutation work such as PR #5 separate from read-only phases unless explicitly authorized.
@@ -154,3 +157,6 @@ CORE-008 and OPS-001 reservations remain released.
 - 2026-09-21T15:49:00Z — PR #12 merged as `319d83c518fe1bf166b0e5339bea331d9bd0eb90` under explicit user authorization.
 - 2026-09-21T15:50:00Z — HANDOFF/WORKBOARD synchronized; REL-005 marked done and reservation released; TEST-008 ready to claim.
 - 2026-09-21T15:54:00Z — Agent 3 claimed TEST-008 and reserved transport protocol/test paths; BUILD-008 package/lockfile/CI paths remain untouched.
+- 2026-09-21T16:00:00Z — PR #13 opened as draft with five TEST-008 files; companion production files were not changed.
+- 2026-09-21T16:01:00Z — Exact-head CI `35622810269` succeeded on `a5052249ba636568615ff3b082218bcb5402e15c`; 80 tests passed and all build/typecheck/dry-run/syntax steps were green.
+- 2026-09-21T16:02:00Z — TEST-008 moved to review; reservation narrowed to the five changed files pending explicit merge authorization.

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useCanvasViewport } from './hooks/useCanvasViewport';
 import { EasyEdaApi, EASYEDA_DOCUMENT_TYPE, type EasyEdaSnapshot } from './lib/easyeda-api';
+import { EasyEdaEditorApi, type EasyEdaEditorState } from './lib/easyeda-editor';
 import { EasyEdaGatewayClient, type GatewayState, type GatewayStatus } from './lib/gateway';
 
 const tools = [
@@ -64,6 +65,7 @@ function cloudSocketUrl(session: string, token: string) {
 export default function App() {
   const gateway = useMemo(() => new EasyEdaGatewayClient(), []);
   const easyeda = useMemo(() => new EasyEdaApi(gateway), [gateway]);
+  const editor = useMemo(() => new EasyEdaEditorApi(gateway), [gateway]);
   const [gatewayState, setGatewayState] = useState<GatewayState>('disconnected');
   const [gatewayStatus, setGatewayStatus] = useState<GatewayStatus>({});
   const [connectionMode, setConnectionMode] = useState<ConnectionMode>(() => (
@@ -77,6 +79,9 @@ export default function App() {
   const [snapshotState, setSnapshotState] = useState<SnapshotState>('idle');
   const [snapshotError, setSnapshotError] = useState<string | null>(null);
   const [selectionBusy, setSelectionBusy] = useState(false);
+  const [editorState, setEditorState] = useState<EasyEdaEditorState | null>(null);
+  const [editorBusy, setEditorBusy] = useState(false);
+  const [editorError, setEditorError] = useState<string | null>(null);
   const { zoom, offset, inputMode, resetView, handlers } = useCanvasViewport();
 
   useEffect(() => {
@@ -87,6 +92,8 @@ export default function App() {
         setSnapshot(null);
         setSnapshotState('idle');
         setSnapshotError(null);
+        setEditorState(null);
+        setEditorError(null);
       }
     };
     const onStatusChange = (event: Event) => {
@@ -143,12 +150,17 @@ export default function App() {
   };
 
   const refreshSnapshot = async () => {
-    if (gatewayState !== 'connected' || snapshotState === 'loading' || selectionBusy) return;
+    if (gatewayState !== 'connected' || snapshotState === 'loading' || selectionBusy || editorBusy) return;
     setSnapshotState('loading');
     setSnapshotError(null);
+    setEditorError(null);
     try {
-      const next = await easyeda.getSnapshot();
-      setSnapshot(next);
+      const [nextSnapshot, nextEditorState] = await Promise.all([
+        easyeda.getSnapshot(),
+        editor.getState(),
+      ]);
+      setSnapshot(nextSnapshot);
+      setEditorState(nextEditorState);
       setSnapshotState('ready');
     } catch (error) {
       setSnapshotState('error');
@@ -157,7 +169,7 @@ export default function App() {
   };
 
   const runSelectionMutation = async (mutation: () => Promise<EasyEdaSnapshot>) => {
-    if (gatewayState !== 'connected' || selectionBusy || snapshotState === 'loading') return;
+    if (gatewayState !== 'connected' || selectionBusy || editorBusy || snapshotState === 'loading') return;
     setSelectionBusy(true);
     setSnapshotError(null);
     try {
@@ -182,13 +194,59 @@ export default function App() {
     void runSelectionMutation(() => easyeda.selectPrimitiveIds(ids));
   };
 
+  const activateEditorTab = async (tabId: string) => {
+    if (gatewayState !== 'connected' || editorBusy || selectionBusy || snapshotState === 'loading') return;
+    if (!editorState?.tabs.some((tab) => tab.tabId === tabId)) return;
+    setEditorBusy(true);
+    setEditorError(null);
+    setSnapshotError(null);
+    try {
+      const nextEditorState = await editor.activateTab(tabId);
+      setEditorState(nextEditorState);
+      try {
+        const nextSnapshot = await easyeda.getSnapshot();
+        setSnapshot(nextSnapshot);
+        setSnapshotState('ready');
+      } catch (error) {
+        setSnapshot(null);
+        setSnapshotState('error');
+        setSnapshotError(error instanceof Error ? error.message : 'EasyEDA tab changed, but the document snapshot could not be refreshed');
+      }
+    } catch (error) {
+      setEditorError(error instanceof Error ? error.message : 'Unable to activate EasyEDA tab');
+    } finally {
+      setEditorBusy(false);
+    }
+  };
+
+  const fitEditor = async (mode: 'all' | 'selection') => {
+    const tabId = editorState?.activeTabId;
+    if (!tabId || gatewayState !== 'connected' || editorBusy || selectionBusy || snapshotState === 'loading') return;
+    setEditorBusy(true);
+    setEditorError(null);
+    try {
+      if (mode === 'selection') await editor.fitSelection(tabId);
+      else await editor.fitAll(tabId);
+    } catch (error) {
+      setEditorError(error instanceof Error ? error.message : 'Unable to change EasyEDA viewport');
+    } finally {
+      setEditorBusy(false);
+    }
+  };
+
   const projectTitle = snapshot?.project?.friendlyName ?? contextName(snapshot) ?? 'EasyEDA workspace';
   const firstSelectedId = snapshot?.selection.ids[0];
   const selectionSupported = selectionDocumentSupported(snapshot?.document?.documentType);
   const selectionControlsDisabled = gatewayState !== 'connected'
     || selectionBusy
+    || editorBusy
     || snapshotState === 'loading'
     || !selectionSupported;
+  const editorControlsDisabled = gatewayState !== 'connected'
+    || editorBusy
+    || selectionBusy
+    || snapshotState === 'loading'
+    || !editorState?.activeTabId;
 
   return (
     <main className="app-shell">
@@ -211,7 +269,7 @@ export default function App() {
             className="primary-button"
             type="button"
             onClick={() => void refreshSnapshot()}
-            disabled={gatewayState !== 'connected' || snapshotState === 'loading' || selectionBusy}
+            disabled={gatewayState !== 'connected' || snapshotState === 'loading' || selectionBusy || editorBusy}
           >
             {snapshotState === 'loading' ? 'Refreshing…' : 'Refresh from EasyEDA'}
           </button>
@@ -239,7 +297,7 @@ export default function App() {
           <div className="canvas-toolbar">
             <span>{Math.round(zoom * 100)}%</span>
             <span className="input-badge">{inputMode}</span>
-            <button type="button" onClick={resetView}>Fit</button>
+            <button type="button" onClick={resetView}>Preview Fit</button>
           </div>
 
           <div className="eda-canvas" {...handlers}>
@@ -248,14 +306,14 @@ export default function App() {
               style={{ transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})` }}
             >
               <div className="demo-board">
-                <div className="board-title">EASYEDA SELECTION SYNC</div>
+                <div className="board-title">EASYEDA EDITOR NAVIGATION</div>
                 <div className="component component-a">
                   <span>LIVE STATE</span>
                   <strong>{documentTypeLabel(snapshot?.document?.documentType)}</strong>
                 </div>
                 <div className="component component-b">
-                  <span>SELECTION</span>
-                  <strong>{snapshot?.selection.total ?? 0} items</strong>
+                  <span>OPEN TABS</span>
+                  <strong>{editorState?.tabs.length ?? 0}</strong>
                 </div>
                 <div className="component component-c">
                   <span>CONTEXT</span>
@@ -369,10 +427,52 @@ export default function App() {
               className="secondary-button wide"
               type="button"
               onClick={() => void refreshSnapshot()}
-              disabled={gatewayState !== 'connected' || snapshotState === 'loading' || selectionBusy}
+              disabled={gatewayState !== 'connected' || snapshotState === 'loading' || selectionBusy || editorBusy}
             >
               {snapshotState === 'loading' ? 'Reading EasyEDA…' : 'Refresh from EasyEDA'}
             </button>
+          </div>
+
+          <div className="panel-section">
+            <span className="eyebrow">EDITOR NAVIGATION</span>
+            <div className="setting-row"><span>Open tabs</span><strong>{editorState?.tabs.length ?? 0}</strong></div>
+            <div className="setting-row"><span>Split screens</span><strong>{editorState?.splitScreens ?? 0}</strong></div>
+            <label className="editor-tab-label">
+              Active tab
+              <select
+                className="editor-tab-select"
+                value={editorState?.activeTabId ?? ''}
+                disabled={gatewayState !== 'connected' || editorBusy || selectionBusy || snapshotState === 'loading' || !editorState?.tabs.length}
+                onChange={(event) => void activateEditorTab(event.target.value)}
+              >
+                {!editorState?.activeTabId && <option value="">No active tab</option>}
+                {editorState?.tabs.map((tab) => (
+                  <option key={tab.tabId} value={tab.tabId}>
+                    {tab.title} — {documentTypeLabel(tab.documentType)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="selection-actions">
+              <button
+                className="secondary-button wide"
+                type="button"
+                onClick={() => void fitEditor('all')}
+                disabled={editorControlsDisabled}
+              >
+                {editorBusy ? 'Working…' : 'Fit all in EasyEDA'}
+              </button>
+              <button
+                className="secondary-button wide"
+                type="button"
+                onClick={() => void fitEditor('selection')}
+                disabled={editorControlsDisabled || (snapshot?.selection.total ?? 0) === 0}
+              >
+                {editorBusy ? 'Working…' : 'Fit selection in EasyEDA'}
+              </button>
+            </div>
+            {editorError && <p className="snapshot-error" role="alert">{editorError}</p>}
+            <p className="panel-note">Navigation uses only validated open-tab IDs. This phase does not open, close, save, move, rotate, or edit document data.</p>
           </div>
 
           <div className="panel-section">
@@ -429,8 +529,8 @@ export default function App() {
 
       <footer className="statusbar">
         <span>Tool: {activeTool}</span>
-        <span>EasyEDA selection sync</span>
-        <span>{snapshot ? `${snapshot.selection.total} selected` : 'No snapshot'}</span>
+        <span>EasyEDA editor navigation</span>
+        <span>{editorState ? `${editorState.tabs.length} tabs` : 'No editor state'}</span>
         <span className={`status-dot-wrap status-${gatewayState}`}><i />{stateLabel(gatewayState)}</span>
       </footer>
     </main>

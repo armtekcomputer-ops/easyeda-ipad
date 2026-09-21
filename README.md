@@ -51,6 +51,9 @@ The VPS initiates the Internet connection to Cloudflare. You do **not** need to 
 - Bounded selection payloads before data is rendered on iPad
 - Narrowly-scoped EasyEDA selection synchronization for PCB, footprint, and schematic documents
 - Selection writes restricted to validated primitive IDs already read from EasyEDA
+- Validated EasyEDA editor-tab navigation
+- Activate already-open EasyEDA tabs from the iPad
+- Fit all primitives or the current selection in the active EasyEDA tab
 - GitHub Actions tests, build, Worker typecheck, and Wrangler validation
 
 ## Phase 3: read-only EasyEDA state
@@ -163,7 +166,48 @@ Supported mutation document types are schematic page (`1`), PCB (`3`), and footp
 
 The official PCB/SCH event listener references state that these listeners are extension-only and standalone script calls throw. Because this project executes standalone code through the Run API Gateway, Phase 4 uses explicit read-back rather than registering selection-change event listeners or inventing a polling API.
 
-Phase 4 still does **not** implement move/rotate, property editing, routing, wire creation, save, undo, or redo.
+## Phase 5: validated editor navigation
+
+Phase 5 adds non-destructive control over the already-open EasyEDA editor tabs before any geometry/property editing is introduced.
+
+The Editor Navigation panel can:
+
+- read the official EasyEDA split-screen/tab tree
+- identify the current active tab by correlating it with the current document
+- switch to another already-open validated EasyEDA tab
+- fit all primitives in the active EasyEDA tab
+- fit the current selection in the active EasyEDA tab
+
+Tab activation reads back fresh editor state before the browser trusts the new active tab. The PWA then refreshes the EasyEDA document snapshot so the inspector follows the newly active document.
+
+### Official editor APIs used
+
+```text
+eda.dmt_EditorControl.getSplitScreenTree()
+eda.dmt_EditorControl.activateDocument(tabId)
+eda.dmt_EditorControl.zoomToAllPrimitives(tabId)
+eda.dmt_EditorControl.zoomToSelectedPrimitives(tabId)
+eda.dmt_SelectControl.getCurrentDocumentInfo()
+```
+
+The official editor contracts used are `IDMT_EditorSplitScreenItem` and `IDMT_EditorTabItem`.
+
+### Editor navigation safety rules
+
+- maximum 32 validated editor tabs returned to the browser
+- maximum 16 split-screen nodes traversed
+- tab and split-screen IDs are limited to 256 characters
+- tab titles are limited to 128 characters
+- tab IDs sent back to EasyEDA are trimmed, length-bounded, and serialized using `JSON.stringify`
+- the UI can choose only IDs already present in validated editor state
+- Phase 5 does not call `openDocument`, `closeDocument`, split-screen mutation, save, move, rotate, routing, property-edit, undo, or redo APIs
+- viewport fit commands do not modify schematic/PCB document data
+
+The editor command/validation layer lives in:
+
+```text
+src/lib/easyeda-editor.ts
+```
 
 ## Requirements
 
@@ -322,17 +366,19 @@ Prefer a systemd credentials mechanism or protected environment file instead of 
 4. Enter the same session used by the VPS agent, normally `default`.
 5. Enter `IPAD_TOKEN`.
 6. Tap **Connect**.
-7. Tap **Refresh from EasyEDA** to read the current EasyEDA document state.
-8. For supported PCB/footprint/schematic documents, use **Selection Sync** to re-apply validated snapshot IDs or clear the active EasyEDA selection.
+7. Tap **Refresh from EasyEDA** to read the current EasyEDA document and editor-tab state.
+8. Use **Editor Navigation** to switch among already-open validated tabs or fit the EasyEDA viewport.
+9. For supported PCB/footprint/schematic documents, use **Selection Sync** to re-apply validated snapshot IDs or clear the active EasyEDA selection.
 
 The token is not compiled into the PWA. The current UI keeps the iPad token in browser `sessionStorage`, so it is cleared when that browser session is discarded.
 
-The inspector reports three independent connection states plus the latest validated EasyEDA snapshot:
+The inspector reports three independent connection states plus validated EasyEDA/editor state:
 
 - PWA -> Cloudflare gateway connection
 - Cloudflare -> VPS agent connection
 - VPS agent -> local EasyEDA bridge connection
 - current document/project/context/selection snapshot
+- open EasyEDA editor tabs and active tab
 - selection synchronization availability for the current document type
 
 ## Session model
@@ -409,10 +455,11 @@ EasyEDA API execution is powerful. Treat the relay as a privileged control path.
 - The relay does not intentionally log tokens or execute payload contents.
 - EasyEDA values returned to the PWA are treated as untrusted and validated before rendering.
 - Selection write inputs are bounded and generated only from validated snapshot IDs.
+- Editor-navigation inputs are bounded and generated only from validated open-tab IDs.
 
 ## Current scope
 
-The transport, Cloudflare/VPS deployment path, iPad interaction shell, validated EasyEDA state snapshot, and first bounded selection-write workflow are implemented. The visual PCB/schematic canvas is still a touch-oriented preview rather than a full remote clone of the EasyEDA editor. Additional editing commands will be added incrementally only after their public EasyEDA APIs are verified and covered by tests.
+The transport, Cloudflare/VPS deployment path, iPad interaction shell, validated EasyEDA state snapshot, selection synchronization, and validated editor-tab navigation are implemented. The visual PCB/schematic canvas is still a touch-oriented preview rather than a full remote clone of the EasyEDA editor. Additional editing commands will be added incrementally only after their public EasyEDA APIs are verified and covered by tests.
 
 ## Handoff workflow
 

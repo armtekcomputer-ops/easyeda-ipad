@@ -37,6 +37,13 @@ export const GATEWAY_RELIABILITY = Object.freeze({
   reconnectMaxMs: 15_000,
 });
 
+export const GATEWAY_LIMITS = Object.freeze({
+  executeCodeBytes: 128 * 1024,
+  frameBytes: 160 * 1024,
+  idLength: 1024,
+  statusTextLength: 2048,
+});
+
 const GATEWAY_MESSAGE_TYPES = new Set<GatewayMessageType>([
   'handshake',
   'execute',
@@ -47,9 +54,6 @@ const GATEWAY_MESSAGE_TYPES = new Set<GatewayMessageType>([
   'companion-status',
   'relay-status',
 ]);
-const MAX_GATEWAY_FRAME_BYTES = 160 * 1024;
-const MAX_ID_LENGTH = 1024;
-const MAX_STATUS_TEXT_LENGTH = 2048;
 const textEncoder = new TextEncoder();
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -62,7 +66,7 @@ function optionalBoundedString(record: Record<string, unknown>, key: string, max
 }
 
 function parseGatewayMessage(raw: unknown): GatewayMessage | null {
-  if (typeof raw !== 'string' || textEncoder.encode(raw).byteLength > MAX_GATEWAY_FRAME_BYTES) return null;
+  if (typeof raw !== 'string' || textEncoder.encode(raw).byteLength > GATEWAY_LIMITS.frameBytes) return null;
 
   let value: unknown;
   try {
@@ -74,10 +78,10 @@ function parseGatewayMessage(raw: unknown): GatewayMessage | null {
   if (!isRecord(value) || typeof value.type !== 'string' || !GATEWAY_MESSAGE_TYPES.has(value.type as GatewayMessageType)) {
     return null;
   }
-  if (!optionalBoundedString(value, 'id', MAX_ID_LENGTH)) return null;
+  if (!optionalBoundedString(value, 'id', GATEWAY_LIMITS.idLength)) return null;
   if (!optionalBoundedString(value, 'service', 128)) return null;
   if (!optionalBoundedString(value, 'clientType', 128)) return null;
-  if (!optionalBoundedString(value, 'error', MAX_STATUS_TEXT_LENGTH)) return null;
+  if (!optionalBoundedString(value, 'error', GATEWAY_LIMITS.statusTextLength)) return null;
   if (!optionalBoundedString(value, 'via', 128)) return null;
   if (value.vpsConnected !== undefined && typeof value.vpsConnected !== 'boolean') return null;
   if (value.edaConnected !== undefined && typeof value.edaConnected !== 'boolean') return null;
@@ -146,6 +150,9 @@ export class EasyEdaGatewayClient extends EventTarget {
   async execute<T = unknown>(code: string, timeoutMs = 30_000): Promise<T> {
     if (!this.socket || this.stateValue !== 'connected') {
       throw new Error('Gateway is not connected');
+    }
+    if (textEncoder.encode(code).byteLength > GATEWAY_LIMITS.executeCodeBytes) {
+      throw new Error(`Gateway execute payload exceeds ${GATEWAY_LIMITS.executeCodeBytes} bytes`);
     }
 
     const id = crypto.randomUUID();

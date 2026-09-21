@@ -69,30 +69,13 @@ EasyEDA Pro on VPS
 ## Phase 2 deliverables
 
 - [x] Add `wrangler.jsonc` with static assets + Durable Object binding/export.
-- [x] Add Worker code with:
-  - `/api/health`
-  - `/api/session/:session/status`
-  - `/ws/ipad?session=...&token=...`
-  - `/ws/vps?session=...&token=...`
-- [x] Add Durable Object relay:
-  - authenticate role before upgrading
-  - one active VPS socket per session
-  - zero or more iPad sockets
-  - forward `execute` iPad -> VPS
-  - route `result`/`error` VPS -> originating iPad
-  - forward relay/VPS status events
-  - enforce payload size limit
-  - preserve client routing across hibernation using WebSocket attachments and self-contained relay IDs
-- [x] Add `companion/cloud-agent.mjs`:
-  - scan `127.0.0.1:49620-49629`
-  - connect outbound to Cloudflare `/ws/vps`
-  - relay execute/result/error
-  - reconnect both local bridge and cloud with backoff
-  - report EasyEDA connection status to iPad clients
-- [x] Update PWA defaults/settings for Cloudflare hosted mode while retaining Direct/LAN fallback.
+- [x] Add Worker code with `/api/health`, authenticated session status, `/ws/ipad`, and `/ws/vps`.
+- [x] Add Durable Object relay with role authentication, one-VPS/multi-iPad routing, status events, payload limits, and hibernation-safe client attachments.
+- [x] Add `companion/cloud-agent.mjs` with local bridge discovery, outbound Cloudflare WSS, bidirectional execute/result/error relay, status reporting, and reconnect backoff.
+- [x] Update PWA for Cloudflare hosted mode while retaining Direct/LAN fallback.
 - [x] Add npm scripts for Worker type generation/dev/deploy and cloud agent.
-- [ ] Update README with VPS + Cloudflare deployment steps and secrets.
-- [ ] Extend CI to generate/check Worker types, typecheck Worker, and syntax-check cloud agent.
+- [x] Update README with VPS + Cloudflare deployment, Worker secrets, cloud agent, iPad connection flow, systemd example, and security guidance.
+- [x] Extend CI to build PWA, generate/typecheck Worker types, run Wrangler deploy dry-run, and syntax-check both companion modes.
 - [ ] Open PR, run CI, fix failures, merge when green.
 
 ## Files added or changed in current branch
@@ -103,6 +86,8 @@ EasyEDA Pro on VPS
 - `worker/index.ts`
 - `companion/cloud-agent.mjs`
 - `package.json`
+- `README.md`
+- `.github/workflows/ci.yml`
 - `src/App.tsx`
 - `src/lib/gateway.ts`
 - `src/styles.css`
@@ -119,7 +104,7 @@ EasyEDA Pro on VPS
 
 ## Known implementation note
 
-A temporary stylesheet overwrite regression occurred during this milestone and was immediately corrected by restoring the full stylesheet from `main` and reapplying only the Cloud connection control styles.
+A temporary stylesheet overwrite regression occurred during development and was corrected in the same branch by restoring the complete stylesheet from `main` and reapplying only the Cloud mode control additions.
 
 ## Loop rule
 
@@ -131,4 +116,4 @@ At each meaningful milestone:
 
 ## Next action
 
-Update deployment documentation and CI, then open a PR and use GitHub Actions to validate the Worker configuration/types and both companion modes.
+Open the Phase 2 PR. Let GitHub Actions perform the authoritative build/type/config validation. Fix every CI failure on the same branch, update this HANDOFF, re-read it, and merge only after CI is green.

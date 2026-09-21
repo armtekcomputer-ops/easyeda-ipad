@@ -1,7 +1,7 @@
 # Shared multi-chat work board
 
 Canonical source: `armtekcomputer-ops/easyeda-ipad`, branch `main`, path `WORKBOARD.md`.
-Updated: 2026-09-21T18:28:00Z. All timestamps use UTC ISO 8601.
+Updated: 2026-09-21T18:41:00Z. All timestamps use UTC ISO 8601.
 This file tracks ownership and unfinished work; `HANDOFF.md` tracks verified product state and decisions.
 
 ## Required workflow
@@ -239,3 +239,26 @@ CORE-008 and OPS-001 reservations remain released.
 - Coordination note: publishing this checkpoint updates canonical `WORKBOARD.md` on `main`, so the PR branch may subsequently be behind by coordination-only board commits. Do not treat the pre-checkpoint behind count as an integration guarantee.
 - Blocker: explicit merge authorization is still required by repository integration rules.
 - Exact next action: on a future authorized integration cycle, refresh remote main/WORKBOARD/PR #20/head checks, reconcile any coordination-only drift again without force-push, merge only if still current, then synchronize HANDOFF/WORKBOARD with the actual merge SHA, release reconciled completed-task reservations, and close #17 only when consistent.
+
+## Authoritative reconciliation — 2026-09-21T18:41:00Z
+
+This section is the current-state override for stale task/reservation rows above; earlier rows remain preserved as historical records.
+
+- COORD-002 is done. PR #20 final head `2018c64f5354b3212578c93f03dac8c1e80f6fb5` passed exact-head CI `35639346673` and merged to `main` as `e176768768d64663b7431f7faa193baa5e9c4e06`. Release the COORD-002 `HANDOFF.md` and coordination-only `WORKBOARD.md` reservation.
+- BUILD-008 is done via PR #10 merge `1e301302095d0d7582c981e24c9a083bd258ebca`; release `package.json`, `package-lock.json`, and `.github/workflows/ci.yml`.
+- TEST-008 is done via PR #13 merge `4d8ae2101b80a38faeefef12b89eb6fb0f55817b`; release `src/lib/gateway.ts`, `src/lib/gateway.test.ts`, `worker/index.ts`, `worker/protocol.ts`, and `worker/protocol.test.ts`.
+- UX-007 is done via PR #14 merge `21d9e0b16424cbe7e63fa74e60403257151ca753`; release `src/styles.css`.
+- VIEW-001 is done via PR #9 merge `34847b05cf979bc5e16b2f4a5394e3ba6390bae7`; release `docs/research/real-board-viewer.md`.
+- EDIT-005 command layer is done via PR #15 merge `ab4364e7769ca7be3be4e26f935c503180142f88`; obsolete PR #5 is closed/superseded and its reconciliation hold is released.
+- LIVE-001 remains `todo` and unassigned. It requires real iPad + deployed Worker/Durable Object + PC companion + EasyEDA Pro/API Gateway evidence; CI cannot complete it.
+
+### EDIT-006 active claim
+
+- Task/owner/run: EDIT-006 / `chatgpt-auto-easyeda` / `chatgpt-auto-easyeda-20260921T184100Z`.
+- State: `in_progress`.
+- Existing branch/PR: `work/EDIT-006/inspector-transform-ui` / PR #19. Resume this PR; do not create a duplicate.
+- Reserved exact path: `src/App.tsx` only.
+- Current observed PR head before takeover: `d01945d42d64609c424ce8ac49cab4118df2335a`.
+- Reconciliation finding: the current PR diff rewrites/removes hundreds of lines from `src/App.tsx`, including current preview/control-surface and inspector behavior, so the existing head is not acceptable for integration despite its older green CI.
+- Authorized scope: preserve current `main` App behavior and add only the guarded single-component transform controls already backed by merged EDIT-005. No free-form IDs/coordinates, footprint mutation, routing/wire/via/text editing, save/create/delete, or full-board editing.
+- Exact next action: rebuild the PR branch from current `main` App semantics with the narrow transform UI, run exact-head CI, inspect the final diff, and integrate only if the destructive stale rewrite is eliminated and acceptance is satisfied.

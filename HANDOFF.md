@@ -145,9 +145,25 @@ PR #19 final functional diff was `src/App.tsx` only (+113/−3). Exact-head CI r
 
 ## Remaining work
 
+### DEPLOY-001 — initial Cloudflare deployment
+
+Cloudflare has **not yet been deployed** for this project. Repository code/config is pre-deploy ready; deployment itself still needs to be performed.
+
+The current `main` has a green push CI on commit `080f5080e96bd573d72c00f2ad568e09768e9e25`, including tests, web build, Worker typecheck, `wrangler deploy --dry-run`, and companion syntax checks.
+
+Initial deployment requires only account-side/runtime setup:
+
+- authenticate Wrangler to the intended Cloudflare account;
+- create different production secrets for `IPAD_TOKEN` and `VPS_TOKEN` (legacy binding name for the PC companion secret);
+- deploy the existing Worker + Static Assets + Durable Object configuration;
+- record the generated `workers.dev` or custom-domain URL and exact deployed commit;
+- verify `/api/health` and authenticated session status.
+
+Do not record or commit the real secret values.
+
 ### LIVE-001 / issue #18 — external real-device gate
 
-This is the only currently open repository task discovered after the final PR #19 integration. It cannot be completed from CI or repository inspection alone.
+LIVE-001 starts only after the initial Cloudflare deployment succeeds. It cannot be completed from CI or repository inspection alone.
 
 Required live evidence:
 
@@ -175,11 +191,11 @@ Do not record real tokens or sensitive deployment values. CI cannot satisfy LIVE
 
 `docs/DEPLOYMENT_PC_COMPANION.md` is merged and documents Worker + Durable Object + outbound PC companion deployment/rollback.
 
-The repository implementation is integrated through EDIT-006. No open PR remains after PR #19. This still does not prove a production deployment or real iPad/EasyEDA behavior; LIVE-001 remains the required live gate.
+The repository implementation is integrated through EDIT-006 and pre-deploy checks are green. **No Cloudflare production deployment has been performed yet.** No open PR remains after PR #19.
 
 ## Next action
 
-Complete LIVE-001 on the real deployment/device stack and record the exact evidence in issue #18. Keep any future full-board BETA viewer or broader editing work in a separately authorized scope.
+Perform the initial Cloudflare deployment from current `main`, set the two Worker secrets, verify the Worker health/session endpoints, then perform LIVE-001 on the real device stack.
 
 ## Completion rules
 

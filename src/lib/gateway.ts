@@ -29,6 +29,14 @@ type PendingRequest = {
   timer: number;
 };
 
+export const GATEWAY_RELIABILITY = Object.freeze({
+  handshakeTimeoutMs: 8_000,
+  heartbeatIntervalMs: 15_000,
+  pongTimeoutMs: 10_000,
+  reconnectInitialMs: 1_000,
+  reconnectMaxMs: 15_000,
+});
+
 const GATEWAY_MESSAGE_TYPES = new Set<GatewayMessageType>([
   'handshake',
   'execute',
@@ -91,43 +99,48 @@ export class EasyEdaGatewayClient extends EventTarget {
   private pending = new Map<string, PendingRequest>();
   private stateValue: GatewayState = 'disconnected';
   private heartbeatTimer: number | null = null;
+  private handshakeTimer: number | null = null;
+  private pongTimer: number | null = null;
+  private reconnectTimer: number | null = null;
+  private outstandingPingId: string | null = null;
+  private targetUrl: string | null = null;
+  private reconnectEnabled = false;
+  private reconnectDelayMs: number = GATEWAY_RELIABILITY.reconnectInitialMs;
 
   get state(): GatewayState {
     return this.stateValue;
   }
 
   connect(url: string): void {
-    this.disconnect();
-    this.setState('connecting');
+    this.reconnectEnabled = false;
+    this.targetUrl = null;
+    this.clearReconnectTimer();
 
-    const socket = new WebSocket(url);
-    this.socket = socket;
+    const previousSocket = this.socket;
+    this.socket = null;
+    this.stopConnectionTimers();
+    try { previousSocket?.close(1000, 'Replacing gateway connection'); } catch { /* no-op */ }
+    this.rejectPending(new Error('Gateway connection replaced'));
 
-    socket.addEventListener('message', (event) => {
-      if (this.socket !== socket) return;
-      this.handleMessage(socket, event);
-    });
-    socket.addEventListener('close', () => {
-      if (this.socket !== socket) return;
-      this.socket = null;
-      this.stopHeartbeat();
-      this.rejectPending(new Error('Gateway connection closed'));
-      this.setState('disconnected');
-      this.dispatchStatus({ vpsConnected: false, edaConnected: false });
-    });
-    socket.addEventListener('error', () => {
-      if (this.socket === socket) this.setState('error');
-    });
+    this.targetUrl = url;
+    this.reconnectEnabled = true;
+    this.reconnectDelayMs = GATEWAY_RELIABILITY.reconnectInitialMs;
+    this.dispatchStatus({ vpsConnected: false, edaConnected: false, localBridgePort: null });
+    this.openSocket();
   }
 
   disconnect(): void {
+    this.reconnectEnabled = false;
+    this.targetUrl = null;
+    this.clearReconnectTimer();
+
     const socket = this.socket;
     this.socket = null;
-    this.stopHeartbeat();
-    socket?.close();
+    this.stopConnectionTimers();
+    try { socket?.close(1000, 'Gateway disconnected'); } catch { /* no-op */ }
     this.rejectPending(new Error('Gateway disconnected'));
     this.setState('disconnected');
-    this.dispatchStatus({ vpsConnected: false, edaConnected: false });
+    this.dispatchStatus({ vpsConnected: false, edaConnected: false, localBridgePort: null });
   }
 
   async execute<T = unknown>(code: string, timeoutMs = 30_000): Promise<T> {
@@ -159,6 +172,43 @@ export class EasyEdaGatewayClient extends EventTarget {
     });
   }
 
+  private openSocket(): void {
+    if (!this.reconnectEnabled || !this.targetUrl) return;
+    this.clearReconnectTimer();
+    this.setState('connecting');
+
+    let socket: WebSocket;
+    try {
+      socket = new WebSocket(this.targetUrl);
+    } catch {
+      this.setState('error');
+      this.scheduleReconnect();
+      return;
+    }
+
+    this.socket = socket;
+    this.startHandshakeDeadline(socket);
+
+    socket.addEventListener('message', (event) => {
+      if (this.socket !== socket) return;
+      this.handleMessage(socket, event);
+    });
+    socket.addEventListener('close', () => {
+      if (this.socket !== socket) return;
+      this.socket = null;
+      this.stopConnectionTimers();
+      this.rejectPending(new Error('Gateway connection closed'));
+      this.setState('disconnected');
+      this.dispatchStatus({ vpsConnected: false, edaConnected: false, localBridgePort: null });
+      this.scheduleReconnect();
+    });
+    socket.addEventListener('error', () => {
+      if (this.socket !== socket) return;
+      this.setState('error');
+      try { socket.close(); } catch { /* close event drives retry */ }
+    });
+  }
+
   private handleMessage(socket: WebSocket, event: MessageEvent): void {
     const message = parseGatewayMessage(event.data);
     if (!message) return;
@@ -166,16 +216,19 @@ export class EasyEdaGatewayClient extends EventTarget {
     if (message.type === 'handshake') {
       if (message.service !== 'easyeda-bridge') {
         this.setState('error');
-        socket.close();
+        try { socket.close(1008, 'Invalid gateway handshake'); } catch { /* no-op */ }
         return;
       }
+      this.clearHandshakeTimer();
+      this.reconnectDelayMs = GATEWAY_RELIABILITY.reconnectInitialMs;
       this.setState('connected');
       this.dispatchStatus({
         via: message.via,
         vpsConnected: message.vpsConnected,
         edaConnected: message.edaConnected,
+        localBridgePort: message.localBridgePort,
       });
-      this.startHeartbeat();
+      this.startHeartbeat(socket);
       return;
     }
 
@@ -198,6 +251,11 @@ export class EasyEdaGatewayClient extends EventTarget {
       return;
     }
 
+    if (message.type === 'pong') {
+      if (message.id && message.id === this.outstandingPingId) this.clearPongTimer();
+      return;
+    }
+
     if ((message.type === 'result' || message.type === 'error') && message.id) {
       const pending = this.pending.get(message.id);
       if (!pending) return;
@@ -213,22 +271,79 @@ export class EasyEdaGatewayClient extends EventTarget {
     }
   }
 
-  private startHeartbeat(): void {
-    this.stopHeartbeat();
-    this.heartbeatTimer = window.setInterval(() => {
-      if (this.socket?.readyState !== WebSocket.OPEN) return;
-      this.socket.send(JSON.stringify({
-        type: 'ping',
-        id: `ipad-${Date.now()}`,
-        timestamp: Date.now(),
-      }));
-    }, 15_000);
+  private startHandshakeDeadline(socket: WebSocket): void {
+    this.clearHandshakeTimer();
+    this.handshakeTimer = window.setTimeout(() => {
+      if (this.socket !== socket || this.stateValue !== 'connecting') return;
+      this.setState('error');
+      try { socket.close(4000, 'Gateway handshake timeout'); } catch { /* no-op */ }
+    }, GATEWAY_RELIABILITY.handshakeTimeoutMs);
   }
 
-  private stopHeartbeat(): void {
+  private clearHandshakeTimer(): void {
+    if (this.handshakeTimer !== null) {
+      window.clearTimeout(this.handshakeTimer);
+      this.handshakeTimer = null;
+    }
+  }
+
+  private startHeartbeat(socket: WebSocket): void {
+    this.clearHeartbeatTimer();
+    this.clearPongTimer();
+    this.heartbeatTimer = window.setInterval(() => {
+      if (this.socket !== socket || socket.readyState !== WebSocket.OPEN || this.stateValue !== 'connected') return;
+      if (this.outstandingPingId !== null) return;
+
+      const id = `ipad-${crypto.randomUUID()}`;
+      this.outstandingPingId = id;
+      socket.send(JSON.stringify({
+        type: 'ping',
+        id,
+        timestamp: Date.now(),
+      }));
+      this.pongTimer = window.setTimeout(() => {
+        if (this.socket !== socket || this.outstandingPingId !== id) return;
+        this.setState('error');
+        try { socket.close(4000, 'Gateway heartbeat timeout'); } catch { /* no-op */ }
+      }, GATEWAY_RELIABILITY.pongTimeoutMs);
+    }, GATEWAY_RELIABILITY.heartbeatIntervalMs);
+  }
+
+  private clearHeartbeatTimer(): void {
     if (this.heartbeatTimer !== null) {
       window.clearInterval(this.heartbeatTimer);
       this.heartbeatTimer = null;
+    }
+  }
+
+  private clearPongTimer(): void {
+    if (this.pongTimer !== null) {
+      window.clearTimeout(this.pongTimer);
+      this.pongTimer = null;
+    }
+    this.outstandingPingId = null;
+  }
+
+  private stopConnectionTimers(): void {
+    this.clearHandshakeTimer();
+    this.clearHeartbeatTimer();
+    this.clearPongTimer();
+  }
+
+  private scheduleReconnect(): void {
+    if (!this.reconnectEnabled || !this.targetUrl || this.reconnectTimer !== null) return;
+    const delay = this.reconnectDelayMs;
+    this.reconnectDelayMs = Math.min(this.reconnectDelayMs * 2, GATEWAY_RELIABILITY.reconnectMaxMs);
+    this.reconnectTimer = window.setTimeout(() => {
+      this.reconnectTimer = null;
+      this.openSocket();
+    }, delay);
+  }
+
+  private clearReconnectTimer(): void {
+    if (this.reconnectTimer !== null) {
+      window.clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
     }
   }
 

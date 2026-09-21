@@ -13,6 +13,8 @@ type SocketAttachment = {
   role: Role;
   clientId: string;
   connectedAt: number;
+  edaConnected?: boolean;
+  localBridgePort?: number | null;
 };
 
 type RelayRoute = {
@@ -189,12 +191,15 @@ export class EasyEdaSession extends DurableObject<Bindings> {
 
     if (url.pathname === '/status') {
       const sockets = this.ctx.getWebSockets();
-      const vpsConnected = sockets.some((socket) => this.attachment(socket)?.role === 'vps');
+      const vps = this.roleSockets('vps')[0];
+      const companion = vps ? this.attachment(vps) : null;
       const ipadClients = sockets.filter((socket) => this.attachment(socket)?.role === 'ipad').length;
       return json({
         service: 'easyeda-ipad-session',
         status: 'ok',
-        vpsConnected,
+        vpsConnected: Boolean(vps),
+        edaConnected: companion?.edaConnected ?? false,
+        localBridgePort: companion?.localBridgePort ?? null,
         ipadClients,
         timestamp: Date.now(),
       });
@@ -208,7 +213,7 @@ export class EasyEdaSession extends DurableObject<Bindings> {
 
     if (role === 'vps') {
       for (const socket of this.roleSockets('vps')) {
-        try { socket.close(4001, 'Replaced by a newer VPS connection'); } catch { /* no-op */ }
+        try { socket.close(4001, 'Replaced by a newer PC companion connection'); } catch { /* no-op */ }
       }
     }
 
@@ -218,6 +223,7 @@ export class EasyEdaSession extends DurableObject<Bindings> {
       role,
       clientId: crypto.randomUUID(),
       connectedAt: Date.now(),
+      ...(role === 'vps' ? { edaConnected: false, localBridgePort: null } : {}),
     };
 
     this.ctx.acceptWebSocket(server);
@@ -278,7 +284,7 @@ export class EasyEdaSession extends DurableObject<Bindings> {
       return;
     }
 
-    this.handleVpsMessage(message);
+    this.handleVpsMessage(socket, attachment, message);
   }
 
   async webSocketClose(socket: WebSocket, code: number, reason: string): Promise<void> {
@@ -306,7 +312,7 @@ export class EasyEdaSession extends DurableObject<Bindings> {
 
     const vps = this.roleSockets('vps')[0];
     if (!vps) {
-      this.send(socket, { type: 'error', id: message.id, error: 'VPS agent is not connected', timestamp: Date.now() });
+      this.send(socket, { type: 'error', id: message.id, error: 'PC companion is not connected', timestamp: Date.now() });
       return;
     }
 
@@ -319,17 +325,15 @@ export class EasyEdaSession extends DurableObject<Bindings> {
     });
   }
 
-  private handleVpsMessage(message: RelayMessage): void {
+  private handleVpsMessage(socket: WebSocket, attachment: SocketAttachment, message: RelayMessage): void {
     if (message.type === 'vps-status') {
-      for (const ipad of this.roleSockets('ipad')) {
-        this.send(ipad, {
-          type: 'companion-status',
-          edaConnected: Boolean(message.edaConnected),
-          localBridgePort: message.localBridgePort ?? null,
-          vpsConnected: true,
-          timestamp: Date.now(),
-        });
-      }
+      const updated: SocketAttachment = {
+        ...attachment,
+        edaConnected: Boolean(message.edaConnected),
+        localBridgePort: message.localBridgePort ?? null,
+      };
+      socket.serializeAttachment(updated);
+      this.broadcastRelayStatus();
       return;
     }
 
@@ -338,7 +342,7 @@ export class EasyEdaSession extends DurableObject<Bindings> {
     const route = parseRelayRoute(message.id);
     if (!route) return;
 
-    const target = this.roleSockets('ipad').find((socket) => this.attachment(socket)?.clientId === route.clientId);
+    const target = this.roleSockets('ipad').find((candidate) => this.attachment(candidate)?.clientId === route.clientId);
     if (!target) return;
 
     this.send(target, {
@@ -354,10 +358,21 @@ export class EasyEdaSession extends DurableObject<Bindings> {
     if (value.role !== 'ipad' && value.role !== 'vps') return null;
     if (typeof value.clientId !== 'string' || value.clientId.length === 0 || value.clientId.length > 128) return null;
     if (typeof value.connectedAt !== 'number' || !Number.isFinite(value.connectedAt)) return null;
+    if (value.edaConnected !== undefined && typeof value.edaConnected !== 'boolean') return null;
+    if (
+      value.localBridgePort !== undefined
+      && value.localBridgePort !== null
+      && (typeof value.localBridgePort !== 'number'
+        || !Number.isInteger(value.localBridgePort)
+        || value.localBridgePort < 1
+        || value.localBridgePort > 65_535)
+    ) return null;
     return {
       role: value.role,
       clientId: value.clientId,
       connectedAt: value.connectedAt,
+      ...(value.edaConnected !== undefined ? { edaConnected: value.edaConnected } : {}),
+      ...(value.localBridgePort !== undefined ? { localBridgePort: value.localBridgePort } : {}),
     };
   }
 
@@ -370,9 +385,13 @@ export class EasyEdaSession extends DurableObject<Bindings> {
   }
 
   private sendRelayStatus(socket: WebSocket): void {
+    const vps = this.roleSockets('vps')[0];
+    const companion = vps ? this.attachment(vps) : null;
     this.send(socket, {
       type: 'relay-status',
-      vpsConnected: this.roleSockets('vps').length > 0,
+      vpsConnected: Boolean(vps),
+      edaConnected: companion?.edaConnected ?? false,
+      localBridgePort: companion?.localBridgePort ?? null,
       timestamp: Date.now(),
     });
   }

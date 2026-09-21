@@ -1,7 +1,7 @@
 # Shared multi-chat work board
 
 Canonical source: `armtekcomputer-ops/easyeda-ipad`, branch `main`, path `WORKBOARD.md`.
-Updated: 2026-09-21T18:15:10Z. All timestamps use UTC ISO 8601.
+Updated: 2026-09-21T18:22:00Z. All timestamps use UTC ISO 8601.
 This file tracks ownership and unfinished work; `HANDOFF.md` tracks verified product state and decisions.
 
 ## Required workflow
@@ -37,6 +37,7 @@ Use `blocked`, `paused`, or `needs_reconciliation` when appropriate. An expired 
 | chat-20260921T160500Z-agent3-ux007 | Agent 3 — preview/control-surface UX honesty | UX-007 | review | 2026-09-21T16:11:00Z | `work/UX-007/chat-20260921T160500Z-agent3-ux007`; head `565c19372ea60770a6d6ab620845e7a34213c2ec`; PR #14 | Exact-head CI `35623710644` green; merge only with explicit authorization after final main reconciliation |
 | unknown-pr5 | Existing PR author/chat not yet registered | EDIT-005 | needs_reconciliation | observed 2026-09-21T13:57:50Z | `feat/primitive-transform`; head observed `4180c2f98191fed082927255d57f6372d4b9425b`; PR #5 | Reconcile only after explicit editing-scope review |
 | chatgpt-auto-easyeda-20260921T181200Z | Autonomous verification cycle | COORD-002 | review | 2026-09-21T18:15:10Z | resumes `work/COORD-002/chatgpt-auto-easyeda-20260921T180639Z`; head `1984167878d9f251ee00d2d4c47c441cddafef23`; PR #20 | Exact-head CI green; PR ready for review; wait for explicit merge authorization |
+| chatgpt-auto-easyeda-20260921T182200Z | Autonomous reconciliation cycle | COORD-002 | in_progress | 2026-09-21T18:22:00Z | resumes `work/COORD-002/chatgpt-auto-easyeda-20260921T180639Z`; PR #20 | Reconcile current main drift into PR branch, rerun exact-head CI, then checkpoint review state; do not merge without explicit authorization |
 
 ## Tasks
 
@@ -216,3 +217,12 @@ CORE-008 and OPS-001 reservations remain released.
 - Live validation: none; CI does not count as real iPad/EasyEDA validation.
 - Blockers/retained reservations: explicit merge authorization is required; retain `HANDOFF.md` and coordination-only `WORKBOARD.md` reservation until main HANDOFF reconciliation is integrated and the canonical board is synchronized.
 - Exact next action: after explicit merge authorization, refresh `main`, WORKBOARD and PR #20 head/checks, merge only if still current, then update HANDOFF/WORKBOARD with actual merge SHA, release reconciled completed-task reservations, and close #17 when consistent.
+
+### COORD-002 resumed run — 2026-09-21T18:22:00Z
+
+- Task/owner/run: COORD-002 / `chatgpt-auto-easyeda` / `chatgpt-auto-easyeda-20260921T182200Z`.
+- Status: in_progress; resumes the existing owner-family reservation only.
+- Exact claimed paths: `HANDOFF.md`; `WORKBOARD.md` coordination updates only. No application-code paths are claimed.
+- Current main: `c167bd4242260be5d8be8adbc3fc01d96c85140b`. PR #20 head remains `1984167878d9f251ee00d2d4c47c441cddafef23`, but compare now reports ahead 1 / behind 3 and GitHub reports `mergeable: false`.
+- Existing exact-head CI `35636536973` succeeded on the old PR head, but must not be treated as exact-head validation after branch synchronization.
+- Next edit batch: reconcile current main into the existing PR #20 branch without force-push, preserve the HANDOFF-only functional diff, then verify the new exact head and CI. No merge/deploy without explicit authorization.

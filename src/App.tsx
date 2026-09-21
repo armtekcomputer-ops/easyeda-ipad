@@ -9,6 +9,11 @@ import {
   type EasyEdaProjectDocumentKind,
 } from './lib/easyeda-project-documents';
 import { EasyEdaSafeSelectionApi } from './lib/easyeda-safe-selection';
+import {
+  EasyEdaComponentTransformApi,
+  EASYEDA_COMPONENT_NUDGE_MM,
+  type EasyEdaComponentTransformOperation,
+} from './lib/easyeda-transform';
 import { EasyEdaGatewayClient, type GatewayState, type GatewayStatus } from './lib/gateway';
 
 const tools = [
@@ -53,6 +58,11 @@ function selectionDocumentSupported(documentType: number | undefined) {
     || documentType === EASYEDA_DOCUMENT_TYPE.FOOTPRINT;
 }
 
+function transformDocumentSupported(documentType: number | undefined) {
+  return documentType === EASYEDA_DOCUMENT_TYPE.SCHEMATIC_PAGE
+    || documentType === EASYEDA_DOCUMENT_TYPE.PCB;
+}
+
 function pcbComponentInspectionSupported(documentType: number | undefined) {
   return documentType === EASYEDA_DOCUMENT_TYPE.PCB
     || documentType === EASYEDA_DOCUMENT_TYPE.FOOTPRINT;
@@ -82,6 +92,7 @@ export default function App() {
   const gateway = useMemo(() => new EasyEdaGatewayClient(), []);
   const easyeda = useMemo(() => new EasyEdaApi(gateway), [gateway]);
   const safeSelection = useMemo(() => new EasyEdaSafeSelectionApi(gateway), [gateway]);
+  const transformApi = useMemo(() => new EasyEdaComponentTransformApi(gateway), [gateway]);
   const editor = useMemo(() => new EasyEdaEditorApi(gateway), [gateway]);
   const pcbComponentApi = useMemo(() => new EasyEdaPcbComponentApi(gateway), [gateway]);
   const projectDocumentsApi = useMemo(() => new EasyEdaProjectDocumentsApi(gateway), [gateway]);
@@ -98,6 +109,7 @@ export default function App() {
   const [snapshotState, setSnapshotState] = useState<SnapshotState>('idle');
   const [snapshotError, setSnapshotError] = useState<string | null>(null);
   const [selectionBusy, setSelectionBusy] = useState(false);
+  const [transformBusy, setTransformBusy] = useState(false);
   const [editorState, setEditorState] = useState<EasyEdaEditorState | null>(null);
   const [editorBusy, setEditorBusy] = useState(false);
   const [editorError, setEditorError] = useState<string | null>(null);
@@ -177,7 +189,7 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [resetView]);
 
-  const interactionBusy = selectionBusy || editorBusy || pcbComponentBusy || projectDocumentsBusy;
+  const interactionBusy = selectionBusy || transformBusy || editorBusy || pcbComponentBusy || projectDocumentsBusy;
   const canConnect = connectionMode === 'cloud'
     ? Boolean(cloudSession.trim() && cloudToken.trim())
     : Boolean(gatewayUrl.trim());
@@ -251,6 +263,39 @@ export default function App() {
       );
     } finally {
       setSelectionBusy(false);
+    }
+  };
+
+  const runComponentTransform = async (operation: EasyEdaComponentTransformOperation) => {
+    const document = snapshot?.document;
+    const ids = snapshot?.selection.ids ?? [];
+    if (
+      gatewayState !== 'connected'
+      || interactionBusy
+      || snapshotState !== 'ready'
+      || !document
+      || !transformDocumentSupported(document.documentType)
+      || ids.length !== 1
+    ) return;
+
+    setTransformBusy(true);
+    setSnapshot(null);
+    setPcbComponent(null);
+    setPcbComponentError(null);
+    setSnapshotState('loading');
+    setSnapshotError(null);
+    setEditorError(null);
+    setProjectDocumentsError(null);
+    try {
+      const next = await transformApi.transform(document, ids, operation);
+      setSnapshot(next);
+      setSnapshotState('ready');
+    } catch (error) {
+      invalidateTrustedState(
+        `${error instanceof Error ? error.message : 'Unable to transform EasyEDA component'}. The operation may have completed; refresh from EasyEDA before another write.`,
+      );
+    } finally {
+      setTransformBusy(false);
     }
   };
 
@@ -383,12 +428,19 @@ export default function App() {
     ?? 'EasyEDA workspace';
   const firstSelectedId = snapshot?.selection.ids[0];
   const selectionSupported = selectionDocumentSupported(snapshot?.document?.documentType);
+  const transformSupported = transformDocumentSupported(snapshot?.document?.documentType);
   const componentInspectionSupported = pcbComponentInspectionSupported(snapshot?.document?.documentType);
   const selectionControlsDisabled = gatewayState !== 'connected'
     || interactionBusy
     || snapshotState !== 'ready'
     || !snapshot?.document
     || !selectionSupported;
+  const transformControlsDisabled = gatewayState !== 'connected'
+    || interactionBusy
+    || snapshotState !== 'ready'
+    || !snapshot?.document
+    || !transformSupported
+    || snapshot.selection.ids.length !== 1;
   const componentInspectorDisabled = gatewayState !== 'connected'
     || interactionBusy
     || snapshotState !== 'ready'
@@ -618,7 +670,65 @@ export default function App() {
               </>
             )}
             {pcbComponentError && <p className="snapshot-error" role="alert">{pcbComponentError}</p>}
-            <p className="panel-note">Read-only Phase 7 inspection uses the validated snapshot document type, UUID, tab ID, and exactly one selected primitive ID. It does not modify, create, delete, save, move, or rotate geometry.</p>
+            <p className="panel-note">This inspector remains read-only and uses the validated snapshot document type, UUID, tab ID, and exactly one selected primitive ID. Guarded move/rotate writes are exposed separately below.</p>
+          </div>
+
+          <div className="panel-section">
+            <span className="eyebrow">COMPONENT TRANSFORM</span>
+            <div className="setting-row"><span>Document</span><strong>{transformSupported ? 'PCB / schematic' : 'Unavailable'}</strong></div>
+            <div className="setting-row"><span>Selection</span><strong>{snapshot?.selection.ids.length === 1 ? 'Exactly one' : 'Select one component'}</strong></div>
+            <div className="setting-row"><span>Move step</span><strong>{EASYEDA_COMPONENT_NUDGE_MM} mm</strong></div>
+            <div className="selection-actions">
+              <button
+                className="secondary-button wide"
+                type="button"
+                onClick={() => void runComponentTransform('x-negative')}
+                disabled={transformControlsDisabled}
+              >
+                {transformBusy ? 'Working…' : 'X −'}
+              </button>
+              <button
+                className="secondary-button wide"
+                type="button"
+                onClick={() => void runComponentTransform('x-positive')}
+                disabled={transformControlsDisabled}
+              >
+                {transformBusy ? 'Working…' : 'X +'}
+              </button>
+              <button
+                className="secondary-button wide"
+                type="button"
+                onClick={() => void runComponentTransform('y-negative')}
+                disabled={transformControlsDisabled}
+              >
+                {transformBusy ? 'Working…' : 'Y −'}
+              </button>
+              <button
+                className="secondary-button wide"
+                type="button"
+                onClick={() => void runComponentTransform('y-positive')}
+                disabled={transformControlsDisabled}
+              >
+                {transformBusy ? 'Working…' : 'Y +'}
+              </button>
+              <button
+                className="secondary-button wide"
+                type="button"
+                onClick={() => void runComponentTransform('rotate-negative')}
+                disabled={transformControlsDisabled}
+              >
+                {transformBusy ? 'Working…' : 'Rotate −90°'}
+              </button>
+              <button
+                className="secondary-button wide"
+                type="button"
+                onClick={() => void runComponentTransform('rotate-positive')}
+                disabled={transformControlsDisabled}
+              >
+                {transformBusy ? 'Working…' : 'Rotate +90°'}
+              </button>
+            </div>
+            <p className="panel-note">Writes are limited to exactly one PCB or schematic component. The trusted document type, UUID, and tab ID are checked inside the same EasyEDA execute request before mutation. Footprints and free-form coordinates are excluded. Trusted state is discarded before each write and restored only after a successful fresh read-back.</p>
           </div>
 
           <div className="panel-section">
@@ -749,7 +859,7 @@ export default function App() {
 
       <footer className="statusbar">
         <span>Tool: {activeTool}</span>
-        <span>Current-project document browser</span>
+        <span>{transformBusy ? 'Transforming component…' : 'Current-project document browser'}</span>
         <span>{projectDocuments ? `${projectDocuments.documents.length} project docs` : 'No project document state'}</span>
         <span className={`status-dot-wrap status-${gatewayState}`}><i />{stateLabel(gatewayState)}</span>
       </footer>

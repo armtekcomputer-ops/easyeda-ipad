@@ -7,6 +7,7 @@ import {
   type EasyEdaCurrentProjectDocuments,
   type EasyEdaProjectDocumentKind,
 } from './lib/easyeda-project-documents';
+import { EasyEdaSafeSelectionApi } from './lib/easyeda-safe-selection';
 import { EasyEdaGatewayClient, type GatewayState, type GatewayStatus } from './lib/gateway';
 
 const tools = [
@@ -74,6 +75,7 @@ function cloudSocketUrl(session: string, token: string) {
 export default function App() {
   const gateway = useMemo(() => new EasyEdaGatewayClient(), []);
   const easyeda = useMemo(() => new EasyEdaApi(gateway), [gateway]);
+  const safeSelection = useMemo(() => new EasyEdaSafeSelectionApi(gateway), [gateway]);
   const editor = useMemo(() => new EasyEdaEditorApi(gateway), [gateway]);
   const projectDocumentsApi = useMemo(() => new EasyEdaProjectDocumentsApi(gateway), [gateway]);
   const [gatewayState, setGatewayState] = useState<GatewayState>('disconnected');
@@ -97,6 +99,15 @@ export default function App() {
   const [projectDocumentsError, setProjectDocumentsError] = useState<string | null>(null);
   const [selectedProjectDocumentUuid, setSelectedProjectDocumentUuid] = useState('');
   const { zoom, offset, inputMode, resetView, handlers } = useCanvasViewport();
+
+  const invalidateTrustedState = (message: string) => {
+    setSnapshot(null);
+    setEditorState(null);
+    setProjectDocuments(null);
+    setSelectedProjectDocumentUuid('');
+    setSnapshotState('error');
+    setSnapshotError(message);
+  };
 
   useEffect(() => {
     const onStateChange = (event: Event) => {
@@ -202,57 +213,62 @@ export default function App() {
   };
 
   const runSelectionMutation = async (mutation: () => Promise<EasyEdaSnapshot>) => {
-    if (gatewayState !== 'connected' || interactionBusy || snapshotState === 'loading') return;
+    if (gatewayState !== 'connected' || interactionBusy || snapshotState !== 'ready' || !snapshot?.document) return;
     setSelectionBusy(true);
+    setSnapshot(null);
+    setSnapshotState('loading');
     setSnapshotError(null);
     try {
       const next = await mutation();
       setSnapshot(next);
       setSnapshotState('ready');
     } catch (error) {
-      setSnapshotState('error');
-      setSnapshotError(error instanceof Error ? error.message : 'Unable to synchronize EasyEDA selection');
+      invalidateTrustedState(
+        `${error instanceof Error ? error.message : 'Unable to synchronize EasyEDA selection'}. The operation may have completed; refresh from EasyEDA before another write.`,
+      );
     } finally {
       setSelectionBusy(false);
     }
   };
 
   const clearSelection = () => {
-    void runSelectionMutation(() => easyeda.clearSelection());
+    const document = snapshot?.document;
+    if (!document || snapshotState !== 'ready') return;
+    void runSelectionMutation(() => safeSelection.clearSelection(document));
   };
 
   const reapplySnapshotSelection = () => {
+    const document = snapshot?.document;
     const ids = snapshot?.selection.ids ?? [];
-    if (ids.length === 0) return;
-    void runSelectionMutation(() => easyeda.selectPrimitiveIds(ids));
+    if (!document || snapshotState !== 'ready' || ids.length === 0) return;
+    void runSelectionMutation(() => safeSelection.selectPrimitiveIds(document, ids));
   };
 
   const activateEditorTab = async (tabId: string) => {
-    if (gatewayState !== 'connected' || interactionBusy || snapshotState === 'loading') return;
+    if (gatewayState !== 'connected' || interactionBusy || snapshotState !== 'ready' || !snapshot?.document) return;
     if (!editorState?.tabs.some((tab) => tab.tabId === tabId)) return;
     setEditorBusy(true);
     setEditorError(null);
     setSnapshotError(null);
     setProjectDocumentsError(null);
+    setSnapshot(null);
+    setEditorState(null);
+    setProjectDocuments(null);
+    setSnapshotState('loading');
     try {
       const nextEditorState = await editor.activateTab(tabId);
+      const [nextSnapshot, nextProjectDocuments] = await Promise.all([
+        easyeda.getSnapshot(),
+        projectDocumentsApi.getCurrentProjectDocuments(),
+      ]);
       setEditorState(nextEditorState);
-      try {
-        const [nextSnapshot, nextProjectDocuments] = await Promise.all([
-          easyeda.getSnapshot(),
-          projectDocumentsApi.getCurrentProjectDocuments(),
-        ]);
-        setSnapshot(nextSnapshot);
-        setProjectDocuments(nextProjectDocuments);
-        setSnapshotState('ready');
-      } catch (error) {
-        setSnapshot(null);
-        setProjectDocuments(null);
-        setSnapshotState('error');
-        setSnapshotError(error instanceof Error ? error.message : 'EasyEDA tab changed, but trusted project/document state could not be refreshed');
-      }
+      setSnapshot(nextSnapshot);
+      setProjectDocuments(nextProjectDocuments);
+      setSnapshotState('ready');
     } catch (error) {
-      setEditorError(error instanceof Error ? error.message : 'Unable to activate EasyEDA tab');
+      const message = error instanceof Error ? error.message : 'Unable to activate EasyEDA tab';
+      setEditorError(`${message}. The active tab may have changed; refresh from EasyEDA before another action.`);
+      invalidateTrustedState('Trusted EasyEDA state was invalidated because tab activation had an uncertain outcome. Refresh from EasyEDA.');
     } finally {
       setEditorBusy(false);
     }
@@ -260,7 +276,7 @@ export default function App() {
 
   const fitEditor = async (mode: 'all' | 'selection') => {
     const tabId = editorState?.activeTabId;
-    if (!tabId || gatewayState !== 'connected' || interactionBusy || snapshotState === 'loading') return;
+    if (!tabId || gatewayState !== 'connected' || interactionBusy || snapshotState !== 'ready') return;
     setEditorBusy(true);
     setEditorError(null);
     try {
@@ -275,17 +291,21 @@ export default function App() {
 
   const openCurrentProjectDocument = async () => {
     const documentUuid = selectedProjectDocumentUuid;
-    if (gatewayState !== 'connected' || interactionBusy || snapshotState === 'loading' || !documentUuid) return;
-    if (!projectDocuments?.documents.some((document) => document.uuid === documentUuid)) return;
+    const trustedDocuments = projectDocuments;
+    if (gatewayState !== 'connected' || interactionBusy || snapshotState !== 'ready' || !snapshot?.document || !documentUuid) return;
+    if (!trustedDocuments?.documents.some((document) => document.uuid === documentUuid)) return;
 
     setProjectDocumentsBusy(true);
     setProjectDocumentsError(null);
     setEditorError(null);
     setSnapshotError(null);
-    let documentOpened = false;
+    setSnapshot(null);
+    setEditorState(null);
+    setProjectDocuments(null);
+    setSelectedProjectDocumentUuid('');
+    setSnapshotState('loading');
     try {
       const opened = await projectDocumentsApi.openCurrentProjectDocument(documentUuid);
-      documentOpened = true;
       const nextEditorState = await editor.activateTab(opened.tabId ?? '');
       const [nextSnapshot, nextProjectDocuments] = await Promise.all([
         easyeda.getSnapshot(),
@@ -296,15 +316,9 @@ export default function App() {
       setProjectDocuments(nextProjectDocuments);
       setSnapshotState('ready');
     } catch (error) {
-      if (documentOpened) {
-        setEditorState(null);
-        setSnapshot(null);
-        setProjectDocuments(null);
-        setSnapshotState('error');
-      } else {
-        setProjectDocuments(null);
-      }
-      setProjectDocumentsError(error instanceof Error ? error.message : 'Unable to open EasyEDA project document');
+      const message = error instanceof Error ? error.message : 'Unable to open EasyEDA project document';
+      setProjectDocumentsError(`${message}. The document may have opened; refresh from EasyEDA before another action.`);
+      invalidateTrustedState('Trusted EasyEDA state was invalidated because document opening had an uncertain outcome. Refresh from EasyEDA.');
     } finally {
       setProjectDocumentsBusy(false);
     }
@@ -318,15 +332,18 @@ export default function App() {
   const selectionSupported = selectionDocumentSupported(snapshot?.document?.documentType);
   const selectionControlsDisabled = gatewayState !== 'connected'
     || interactionBusy
-    || snapshotState === 'loading'
+    || snapshotState !== 'ready'
+    || !snapshot?.document
     || !selectionSupported;
   const editorControlsDisabled = gatewayState !== 'connected'
     || interactionBusy
-    || snapshotState === 'loading'
+    || snapshotState !== 'ready'
+    || !snapshot?.document
     || !editorState?.activeTabId;
   const projectDocumentControlsDisabled = gatewayState !== 'connected'
     || interactionBusy
-    || snapshotState === 'loading'
+    || snapshotState !== 'ready'
+    || !snapshot?.document
     || !projectDocuments?.project
     || projectDocuments.documents.length === 0;
 
@@ -556,7 +573,7 @@ export default function App() {
               <select
                 className="editor-tab-select"
                 value={editorState?.activeTabId ?? ''}
-                disabled={gatewayState !== 'connected' || interactionBusy || snapshotState === 'loading' || !editorState?.tabs.length}
+                disabled={gatewayState !== 'connected' || interactionBusy || snapshotState !== 'ready' || !snapshot?.document || !editorState?.tabs.length}
                 onChange={(event) => void activateEditorTab(event.target.value)}
               >
                 {!editorState?.activeTabId && <option value="">No active tab</option>}
@@ -611,7 +628,7 @@ export default function App() {
                 {selectionBusy ? 'Syncing…' : 'Clear EasyEDA selection'}
               </button>
             </div>
-            <p className="panel-note">Selection writes use only validated IDs already read from EasyEDA. State is read back after every successful mutation.</p>
+            <p className="panel-note">Selection writes require the same validated document type, UUID, and tab ID that produced the snapshot. Trusted state is invalidated before each write and restored only by a successful read-back.</p>
           </div>
 
           <div className="panel-section">

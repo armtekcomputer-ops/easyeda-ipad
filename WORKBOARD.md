@@ -1,7 +1,7 @@
 # Shared multi-chat work board
 
 Canonical source: `armtekcomputer-ops/easyeda-ipad`, branch `main`, path `WORKBOARD.md`.
-Updated: 2026-09-21T14:31:00Z. All timestamps use UTC ISO 8601.
+Updated: 2026-09-21T14:54:00Z. All timestamps use UTC ISO 8601.
 This file tracks ownership and unfinished work; `HANDOFF.md` tracks verified product state and decisions.
 
 ## Required workflow
@@ -30,7 +30,8 @@ Use `blocked`, `paused`, or `needs_reconciliation` when appropriate. An expired 
 | chat-20260921T135900Z-agent1-build008 | Agent 1 — reproducible build/CI | BUILD-008 | review | 2026-09-21T14:12:00Z | `work/BUILD-008/chat-20260921T135900Z-agent1-build008`; head `fb8712a9e222f465d086d5e9d87f14a6188b6427`; PR #10 | CI green; integrate only with explicit merge authorization, then sync HANDOFF/WORKBOARD |
 | chat-20260921T141000Z-agent2-view001 | Agent 2 — real-board viewer research | VIEW-001 | claimed | 2026-09-21T14:10:00Z | `work/VIEW-001/chat-20260921T141000Z-agent2-view001`; PR #9 | Complete research-only feasibility work without application-code changes |
 | chat-20260921T141500Z-agent3-ops001 | Agent 3 — PC companion deployment/runbook | OPS-001 | done | 2026-09-21T14:31:00Z | PR #11 merged as `a33f2d9ec66e993c69d1d1288bb579f83248a15b`; HANDOFF refreshed on main | No further OPS-001 work; reservation released |
-| unknown-pr8 | Existing PR author/chat not yet registered | CORE-008 | needs_reconciliation | observed 2026-09-21T13:57:50Z | `feat/pcb-component-inspector`; head observed `d6d8a6213d1504d8e63e0e7b373a969711b34b1d`; PR #8 | Owner self-registers/reconciles before further writes |
+| chat-20260921T145300Z-agent3-recon008 | Agent 3 — PR #8 reconciliation reviewer | RECON-008 | in_progress | 2026-09-21T14:54:00Z | review-only; no application path ownership | Finish PR #8 reconciliation without modifying reserved code; publish exact blockers/next integration step |
+| unknown-pr8 | Existing PR author/chat not yet registered | CORE-008 | needs_reconciliation | observed 2026-09-21T14:53:00Z | `feat/pcb-component-inspector`; head `d6d8a6213d1504d8e63e0e7b373a969711b34b1d`; PR #8; diverged ahead 13 / behind 11 | Owner reconciles current main and reruns exact-head CI before merge; reviewer does not take over code paths |
 | unknown-pr5 | Existing PR author/chat not yet registered | EDIT-005 | needs_reconciliation | observed 2026-09-21T13:57:50Z | `feat/primitive-transform`; head observed `4180c2f98191fed082927255d57f6372d4b9425b`; PR #5 | Reconcile before any transform integration |
 
 ## Tasks
@@ -38,7 +39,8 @@ Use `blocked`, `paused`, or `needs_reconciliation` when appropriate. An expired 
 | ID | Priority | Deliverable | State | Owner | Dependency / evidence / next step |
 | --- | --- | --- | --- | --- | --- |
 | COORD-001 | P1 | Shared coordination protocol | done | chat-20260921-coordination-142684dc | Delivered on main |
-| CORE-008 | P1 | Reconcile PR #8 trusted-state corrections, PC companion migration, Phase 7 foundation | needs_reconciliation | unknown-pr8 | PR #8 exact-head CI run `35601180677` succeeded; do not duplicate its code paths |
+| CORE-008 | P1 | Reconcile PR #8 trusted-state corrections, PC companion migration, Phase 7 foundation | needs_reconciliation | unknown-pr8 | Head `d6d8a6213d1504d8e63e0e7b373a969711b34b1d`; exact-head CI `35601180677` succeeded on old base; branch now ahead 13 / behind 11 versus current main; do not duplicate or merge before reconciliation |
+| RECON-008 | P1 | Read-only reconciliation/review of PR #8 against current main | in_progress | chat-20260921T145300Z-agent3-recon008 | No code-path writes or takeover; verify divergence, scope completeness, checks and integration blockers; record result in PR metadata/board |
 | REL-005 | P2 | R5 connection deadlines/recovery/status + R6 bounded pending requests | blocked | unassigned | Wait for CORE-008 reconciliation; claim only residual gaps |
 | BUILD-008 | P2 | Deterministic npm install/CI lockfile | review | chat-20260921T135900Z-agent1-build008 | PR #10 head `fb8712a9e222f465d086d5e9d87f14a6188b6427`; CI run `35610185239` success |
 | TEST-008 | P2 | Transport behavior tests for auth/routing/disconnect/malformed/payload bounds | blocked | unassigned | Wait for CORE-008 protocol stabilization |
@@ -56,6 +58,8 @@ Use `blocked`, `paused`, or `needs_reconciliation` when appropriate. An expired 
 | VIEW-001 | chat-20260921T141000Z-agent2-view001 | `docs/research/real-board-viewer.md` | retained while active | Research reaches review/done or explicit handoff |
 | CORE-008 | unknown-pr8 | `companion/cloud-agent.mjs`; `companion/server.mjs`; `public/sw.js`; `src/App.tsx`; `src/lib/easyeda-pcb-component.ts`; `src/lib/easyeda-pcb-component.test.ts`; `src/lib/easyeda-safe-selection.ts`; `src/lib/easyeda-safe-selection.test.ts`; `src/lib/gateway.ts`; `worker/index.ts` | reconciliation hold | Owner registers scope or explicit documented reconciliation |
 | EDIT-005 | unknown-pr5 | Existing PR #5 transform diff | reconciliation hold | Review diff and resolve overlap before write/integration |
+
+`RECON-008` is review-only and reserves no application file. It must not modify CORE-008 code paths or move the PR branch.
 
 `OPS-001` reservation for `docs/DEPLOYMENT_PC_COMPANION.md` is released as of 2026-09-21T14:31:00Z after PR #11 merge and HANDOFF synchronization.
 
@@ -90,6 +94,18 @@ Use `blocked`, `paused`, or `needs_reconciliation` when appropriate. An expired 
 - reservation released: yes
 - remaining: none for OPS-001
 
+## Checkpoint — RECON-008
+
+- task/chat: RECON-008 / `chat-20260921T145300Z-agent3-recon008`
+- state: in_progress
+- scope: read-only review/reconciliation of PR #8; no application-code ownership
+- PR/head: #8 / `d6d8a6213d1504d8e63e0e7b373a969711b34b1d`
+- current-main comparison: diverged, ahead 13 / behind 11
+- exact-head CI on old base: run `35601180677` succeeded
+- observed scope gap: compatibility `vps` identifiers remain; Phase 7 API/tests exist but selected-component inspector UI is not integrated
+- PR body updated with reconciliation warning; no branch/code files changed
+- next: finish detailed review; owner must sync current main and rerun CI before any merge decision
+
 ## Integration rules
 
 - Verify final PR head and exact-head checks before integration.
@@ -111,3 +127,5 @@ Use `blocked`, `paused`, or `needs_reconciliation` when appropriate. An expired 
 - 2026-09-21T14:29:00Z — User explicitly authorized merge of PR #11.
 - 2026-09-21T14:30:00Z — PR #11 merged as `a33f2d9ec66e993c69d1d1288bb579f83248a15b`.
 - 2026-09-21T14:31:00Z — HANDOFF synchronized and OPS-001 reservation released; task marked done.
+- 2026-09-21T14:53:00Z — Agent 3 started RECON-008 review-only reconciliation of PR #8; no takeover of CORE-008 paths.
+- 2026-09-21T14:54:00Z — Confirmed PR #8 is ahead 13 / behind 11 versus current main; PR body updated to block stale-base merge pending owner reconciliation and fresh CI.

@@ -3,6 +3,7 @@ import type { EasyEdaExecutor } from './easyeda-api';
 import {
   EasyEdaPcbComponentApi,
   buildEasyEdaInspectSelectedPcbComponentCode,
+  normalizeEasyEdaPcbComponentDocumentIdentity,
   normalizeEasyEdaPrimitiveId,
   parseEasyEdaPcbComponentInspectResult,
   parseEasyEdaPcbComponentState,
@@ -19,6 +20,12 @@ class QueueExecutor implements EasyEdaExecutor {
     return this.values.shift() as T;
   }
 }
+
+const documentIdentity = {
+  documentType: 3,
+  uuid: 'pcb-document-a',
+  tabId: 'tab-a',
+};
 
 const componentState = {
   version: 1,
@@ -44,13 +51,52 @@ describe('PCB component primitive ID validation', () => {
   });
 });
 
+describe('PCB component document identity validation', () => {
+  it('normalizes a trusted PCB or footprint identity', () => {
+    expect(normalizeEasyEdaPcbComponentDocumentIdentity({
+      documentType: 4,
+      uuid: ' footprint-document ',
+      tabId: ' footprint-tab ',
+    })).toEqual({
+      documentType: 4,
+      uuid: 'footprint-document',
+      tabId: 'footprint-tab',
+    });
+  });
+
+  it('rejects unsupported, missing, and oversized document identity fields', () => {
+    expect(() => normalizeEasyEdaPcbComponentDocumentIdentity({
+      documentType: 1,
+      uuid: 'schematic-page',
+      tabId: 'tab-1',
+    })).toThrow(/PCB or footprint/i);
+    expect(() => normalizeEasyEdaPcbComponentDocumentIdentity({
+      documentType: 3,
+      uuid: '   ',
+      tabId: 'tab-1',
+    })).toThrow(/UUID is invalid/i);
+    expect(() => normalizeEasyEdaPcbComponentDocumentIdentity({
+      documentType: 3,
+      uuid: 'pcb-1',
+      tabId: 'x'.repeat(257),
+    })).toThrow(/tab ID is invalid/i);
+  });
+});
+
 describe('PCB component inspector command generation', () => {
-  it('uses selection read-back and documented component getters only', () => {
-    const code = buildEasyEdaInspectSelectedPcbComponentCode('component-1');
+  it('guards document identity before selection and documented component getters', () => {
+    const code = buildEasyEdaInspectSelectedPcbComponentCode(documentIdentity, 'component-1');
+    const documentGuardIndex = code.indexOf('currentDocument.uuid !== expectedDocument.uuid');
+    const tabGuardIndex = code.indexOf('currentDocument.tabId !== expectedDocument.tabId');
     const selectionIndex = code.indexOf('getAllSelectedPrimitives_PrimitiveId()');
     const componentIndex = code.indexOf('pcb_PrimitiveComponent.get(expectedPrimitiveId)');
 
+    expect(code).toContain(`const expectedDocument = ${JSON.stringify(documentIdentity)};`);
     expect(code).toContain('eda.dmt_SelectControl.getCurrentDocumentInfo()');
+    expect(code).toContain('currentDocument.documentType !== expectedDocument.documentType');
+    expect(code).toContain('currentDocument.uuid !== expectedDocument.uuid');
+    expect(code).toContain('currentDocument.tabId !== expectedDocument.tabId');
+    expect(code).toContain("reason: 'document-changed'");
     expect(code).toContain('eda.pcb_SelectControl.getAllSelectedPrimitives_PrimitiveId()');
     expect(code).toContain('eda.pcb_PrimitiveComponent.get(expectedPrimitiveId)');
     expect(code).toContain('component.getState_PrimitiveId()');
@@ -61,6 +107,9 @@ describe('PCB component inspector command generation', () => {
     expect(code).toContain('component.getState_Layer()');
     expect(code).toContain('component.getState_Designator()');
     expect(code).toContain('component.getState_Name()');
+    expect(documentGuardIndex).toBeGreaterThanOrEqual(0);
+    expect(tabGuardIndex).toBeGreaterThan(documentGuardIndex);
+    expect(selectionIndex).toBeGreaterThan(tabGuardIndex);
     expect(componentIndex).toBeGreaterThan(selectionIndex);
     expect(code).not.toContain('.modify(');
     expect(code).not.toContain('.create(');
@@ -68,9 +117,15 @@ describe('PCB component inspector command generation', () => {
     expect(code).not.toContain('.save(');
   });
 
-  it('serializes the expected primitive ID safely', () => {
+  it('serializes the expected document and primitive ID safely', () => {
     const primitiveId = 'component-"-1';
-    const code = buildEasyEdaInspectSelectedPcbComponentCode(primitiveId);
+    const expectedDocument = {
+      documentType: 3,
+      uuid: 'pcb-"-1',
+      tabId: 'tab-\\-1',
+    };
+    const code = buildEasyEdaInspectSelectedPcbComponentCode(expectedDocument, primitiveId);
+    expect(code).toContain(`const expectedDocument = ${JSON.stringify(expectedDocument)};`);
     expect(code).toContain(`const expectedPrimitiveId = ${JSON.stringify(primitiveId)};`);
   });
 });
@@ -101,6 +156,20 @@ describe('PCB component inspect result parsing', () => {
     });
   });
 
+  it('accepts document-changed as a bounded failure reason', () => {
+    expect(parseEasyEdaPcbComponentInspectResult({
+      version: 1,
+      ok: false,
+      component: null,
+      reason: 'document-changed',
+    })).toEqual({
+      version: 1,
+      ok: false,
+      component: null,
+      reason: 'document-changed',
+    });
+  });
+
   it('rejects malformed and inconsistent envelopes', () => {
     expect(() => parseEasyEdaPcbComponentInspectResult(null)).toThrow(/root must be an object/i);
     expect(() => parseEasyEdaPcbComponentInspectResult({
@@ -125,11 +194,31 @@ describe('EasyEdaPcbComponentApi', () => {
     }]);
     const api = new EasyEdaPcbComponentApi(executor);
 
-    const result = await api.inspectSelectedComponent('component-1');
+    const result = await api.inspectSelectedComponent(documentIdentity, 'component-1');
 
     expect(result).toEqual(componentState);
     expect(executor.calls).toHaveLength(1);
+    expect(executor.calls[0]).toContain('document-changed');
     expect(executor.calls[0]).toContain('selection-mismatch');
+  });
+
+  it('rejects a switched document even when the primitive ID could be the same', async () => {
+    const executor = new QueueExecutor([{
+      version: 1,
+      ok: false,
+      component: null,
+      reason: 'document-changed',
+    }]);
+    const api = new EasyEdaPcbComponentApi(executor);
+
+    await expect(api.inspectSelectedComponent(documentIdentity, 'component-1')).rejects.toThrow(/document changed.*refresh/i);
+    expect(executor.calls).toHaveLength(1);
+    const code = executor.calls[0];
+    expect(code.indexOf('currentDocument.uuid !== expectedDocument.uuid'))
+      .toBeLessThan(code.indexOf('getAllSelectedPrimitives_PrimitiveId()'));
+    expect(code.indexOf('currentDocument.tabId !== expectedDocument.tabId'))
+      .toBeLessThan(code.indexOf('getAllSelectedPrimitives_PrimitiveId()'));
+    expect(code).not.toContain('.modify(');
   });
 
   it('surfaces selection changes without any write fallback', async () => {
@@ -141,7 +230,7 @@ describe('EasyEdaPcbComponentApi', () => {
     }]);
     const api = new EasyEdaPcbComponentApi(executor);
 
-    await expect(api.inspectSelectedComponent('component-1')).rejects.toThrow(/selection changed.*refresh/i);
+    await expect(api.inspectSelectedComponent(documentIdentity, 'component-1')).rejects.toThrow(/selection changed.*refresh/i);
     expect(executor.calls).toHaveLength(1);
     expect(executor.calls[0]).not.toContain('.modify(');
   });

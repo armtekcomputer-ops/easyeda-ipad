@@ -5,11 +5,12 @@ Last updated: 2026-09-21 (Asia/Bangkok)
 ## Project source of truth
 
 Repository: `armtekcomputer-ops/easyeda-ipad`
-Branch in progress: `feat/editor-navigation`
 Base: `main`
-Phase 4 PR: `#4` merged
-Phase 4 merge commit: `84b59faff36af02ea4e33aba8f7eb806873b46a4`
-Phase 5 PR: `#6` open
+Current completed version: `0.5.0`
+Phase 5 PR: `#6` merged
+Phase 5 merge commit: `54b480c9158d5e8cbfe1c18ec320f011fd006abd`
+Phase 5 final head: `b9a252baf3a74114da2ed85740bd4d87e5333c58`
+Phase 5 final CI: run `35597501079` — success
 
 This file is the operational handoff. Continue work from this file first, not from chat memory.
 
@@ -34,9 +35,9 @@ EasyEDA bridge 127.0.0.1:49620-49629
 EasyEDA Pro on VPS
 ```
 
-## Completed phases
+## Completed capabilities
 
-### Phase 1–2
+### Phase 1–2 — transport and iPad shell
 
 - iPad-first PWA shell with touch/Pencil viewport foundation.
 - Cloudflare Worker + Durable Object relay.
@@ -49,148 +50,115 @@ EasyEDA Pro on VPS
 - Current document/project/PCB/schematic/selection snapshot.
 - Browser-side schema validation and bounded primitive summaries.
 - `Refresh from EasyEDA` UI.
-- PR #3 merged with CI green.
 
 ### Phase 4 — selection synchronization
 
-- Verified selection APIs only:
-  - `eda.pcb_SelectControl.clearSelected()`
-  - `eda.pcb_SelectControl.doSelectPrimitives(primitiveIds)`
-  - `eda.sch_SelectControl.clearSelected()`
-  - `eda.sch_SelectControl.doSelectPrimitives(primitiveIds)`
-- Active document dispatch via `eda.dmt_SelectControl.getCurrentDocumentInfo()` inside the mutation command.
-- Maximum 100 validated primitive IDs, max 256 characters each, trimmed and de-duplicated.
-- UI cannot type arbitrary primitive IDs; it can only reuse IDs from validated EasyEDA state.
-- Successful selection mutations read back a fresh snapshot before local state changes.
-- PR #4 merged as `84b59faff36af02ea4e33aba8f7eb806873b46a4` after final head CI run `35594979703` passed.
+- Clear and re-apply selection using only verified PCB/SCH APIs.
+- Maximum 100 validated primitive IDs, max 256 characters each.
+- UI cannot type arbitrary primitive IDs; it only reuses IDs read from validated EasyEDA state.
+- Successful mutations read back a fresh EasyEDA snapshot.
 
-## Phase 5 goal — editor navigation
+### Phase 5 — validated editor navigation
 
-Add non-destructive iPad control over the EasyEDA editor itself before introducing geometry/property mutations.
+Merged in PR #6 as `54b480c9158d5e8cbfe1c18ec320f011fd006abd`.
 
-Implemented scope:
+Implemented:
 
-- Read currently open editor tab/split-screen state.
-- Identify the active EasyEDA tab.
-- Activate an already-open EasyEDA document tab.
-- Fit all primitives in a validated tab.
-- Fit the current selection in a validated tab.
-- Refresh document snapshot after tab activation so the inspector follows the new active document.
+- Read validated open-tab/split-screen state.
+- Identify the current active EasyEDA tab.
+- Activate another already-open validated tab.
+- Fit all primitives in EasyEDA.
+- Fit the current selection in EasyEDA.
+- Refresh editor state after tab activation.
+- Refresh document snapshot after tab activation; stale document state is discarded if the follow-up read fails.
+- Version bumped to `0.5.0`.
 
-Explicitly out of scope:
+Verified APIs:
 
-- close document
-- open document/library document
-- create/move/merge split screens
-- save
-- move/rotate primitives
-- property editing
-- routing/wire creation
-- undo/redo
+- `eda.dmt_EditorControl.getSplitScreenTree()`
+- `eda.dmt_EditorControl.activateDocument(tabId)`
+- `eda.dmt_EditorControl.zoomToAllPrimitives(tabId)`
+- `eda.dmt_EditorControl.zoomToSelectedPrimitives(tabId)`
+- `eda.dmt_SelectControl.getCurrentDocumentInfo()`
 
-## Verified official Phase 5 APIs
+Safety limits:
 
-Verified from `easyeda/easyeda-api-skill`.
+- maximum 32 tabs
+- maximum 16 split-screen nodes
+- ID length max 256
+- tab title max 128
+- inputs sent back to EasyEDA come only from validated editor state and are JSON-serialized
+- no open/close/save/geometry mutation was added in Phase 5
+
+Final Phase 5 verification:
+
+- exact head `b9a252baf3a74114da2ed85740bd4d87e5333c58`
+- CI run `35597501079`
+- conclusion `success`
+- PR #6 mergeable before merge
+- merged successfully
+
+## Phase 6 target — current-project document browser
+
+Goal: let the iPad open schematic pages and PCBs from the **already-current project** even when those documents are not already open as editor tabs.
+
+This is intentionally narrower than project switching. Do **not** call `eda.dmt_Project.openProject()` in this phase because the official documentation warns that opening another project can directly lose unsaved changes in the previously open project.
+
+### Verified official data source
+
+`eda.dmt_Project.getCurrentProjectInfo(): Promise<IDMT_ProjectItem | undefined>`
+
+`IDMT_ProjectItem.data` contains project document data including:
+
+- `IDMT_SchematicItem`
+- `IDMT_PcbItem`
+- `IDMT_BoardItem`
+- `IDMT_PanelItem`
+
+For Phase 6, only these non-destructive document targets are planned initially:
+
+- schematic pages from `IDMT_SchematicItem.page[]`
+- PCB items from `IDMT_PcbItem`
+
+Official identifiers:
+
+- `IDMT_SchematicPageItem.uuid` — schematic sheet UUID
+- `IDMT_PcbItem.uuid` — PCB UUID
+- `EDMT_ItemType.SCHEMATIC_PAGE = 'Schematic Page'`
+- `EDMT_ItemType.PCB = 'PCB'`
+
+### Verified official open-document API
 
 Namespace: `eda.dmt_EditorControl`
 
-- `getSplitScreenTree(): Promise<IDMT_EditorSplitScreenItem | undefined>`
-- `activateDocument(tabId: string): Promise<boolean>`
-- `zoomToAllPrimitives(tabId?: string): Promise<{ left: number; right: number; top: number; bottom: number } | false>`
-- `zoomToSelectedPrimitives(tabId?: string): Promise<{ left: number; right: number; top: number; bottom: number } | false>`
+- `openDocument(documentUuid: string, splitScreenId?: string): Promise<string | undefined>`
 
-Current active tab is correlated using:
+Phase 6 will not pass a guessed split-screen ID. Initial implementation should call only `openDocument(documentUuid)` for a document UUID that came from the validated current-project browser state.
 
-- `eda.dmt_SelectControl.getCurrentDocumentInfo()`
+### Phase 6 safety rules
 
-Relevant official data contracts:
+- Never accept arbitrary typed document UUIDs from the UI.
+- Browser may only open UUIDs present in the latest validated current-project document list.
+- Bound the number of returned documents before rendering.
+- Bound UUID/name lengths.
+- Serialize UUIDs with `JSON.stringify` before command generation.
+- Do not call `openProject`, `closeDocument`, `save`, split-screen mutations, or geometry/property mutation APIs.
+- After `openDocument` succeeds, read back fresh editor state and fresh EasyEDA snapshot before updating trusted local state.
+- If any read-back fails, do not pretend the requested document became the trusted active state.
 
-`IDMT_EditorSplitScreenItem`
+## Phase 6 status
 
-- `id: string`
-- `tabs?: Array<IDMT_EditorTabItem>`
-- `children?: Array<IDMT_EditorSplitScreenItem>`
-- `tabs` and `children` do not coexist on the same node.
-
-`IDMT_EditorTabItem`
-
-- `tabId: string`
-- `title: string`
-- `documentType: EDMT_EditorDocumentType`
-- `draggable: boolean`
-- `isAbleDelete: boolean`
-
-## Phase 5 safety limits
-
-- Maximum 32 tabs returned to the browser.
-- Maximum 16 split-screen nodes traversed.
-- Tab/split-screen IDs are limited to 256 characters.
-- Tab titles are limited to 128 characters.
-- All external EasyEDA editor state is schema-validated before UI use.
-- Tab IDs sent back to EasyEDA are trimmed, non-empty, length-bounded, and serialized with `JSON.stringify`.
-- The iPad UI can only select tab IDs already present in validated editor state.
-- Phase 5 navigation operations never call save/open/close/move/split-screen mutation APIs.
-- Tab activation reads back fresh editor state before it is trusted locally.
-- After a successful tab activation, the PWA refreshes the EasyEDA document snapshot; if that second read fails, stale document state is discarded rather than shown as current.
-- Fit Selection is disabled when the validated document snapshot has no selection.
-- Viewport fit commands do not change PCB/schematic document data.
-
-## Phase 5 implementation status
-
-- [x] Confirm Phase 4 final head CI `35594979703` passed and PR #4 is merged.
-- [x] Create branch `feat/editor-navigation` from Phase 4 merge commit.
-- [x] Verify official editor state/tab contracts and navigation signatures.
-- [x] Add `src/lib/easyeda-editor.ts`.
-- [x] Add bounded editor state parser.
-- [x] Add `EasyEdaEditorApi.getState()`.
-- [x] Add `EasyEdaEditorApi.activateTab(tabId)` with read-back after success.
-- [x] Add `EasyEdaEditorApi.fitAll(tabId)`.
-- [x] Add `EasyEdaEditorApi.fitSelection(tabId)`.
-- [x] Add tests for command generation, tab-ID serialization/validation, bounded editor-state validation, activation read-back, and fit-selection behavior.
-- [x] Open Phase 5 PR #6.
-- [x] API/test foundation passed CI before UI integration.
-- [x] Add iPad Editor Navigation UI.
-- [x] Refresh both editor state and EasyEDA snapshot after tab activation.
-- [x] Disable Fit Selection when no validated selection exists.
-- [x] UI head `91ddf5fb3697d6f5aec5153e73a142c1d296fa48` passed CI run `35597290757` including tests, PWA build, Worker typecheck, Wrangler validation, direct companion syntax, and VPS cloud-agent syntax.
-- [x] Update README for Phase 5 behavior.
-- [x] Bump package version to `0.5.0`.
-- [ ] Verify CI on the exact latest documentation/version/HANDOFF head.
-- [ ] Merge PR #6 only if that exact head is green and mergeable.
-- [ ] After merge, start a new branch/HANDOFF loop for the next narrowly-scoped capability.
-
-## Phase 5 files changed
-
-- `HANDOFF.md`
-- `README.md`
-- `package.json`
-- `src/App.tsx`
-- `src/lib/easyeda-editor.ts`
-- `src/lib/easyeda-editor.test.ts`
-
-## CI history
-
-### Phase 5 API/test foundation
-
-The API/test foundation completed tests, web build, and Worker typecheck successfully before the UI was added.
-
-### Phase 5 UI head
-
-Head: `91ddf5fb3697d6f5aec5153e73a142c1d296fa48`
-Run: `35597290757`
-Conclusion: `success`
-
-Passed:
-
-- dependency installation
-- EasyEDA command-layer tests
-- PWA TypeScript/Vite build
-- Worker type generation/typecheck
-- Wrangler deploy dry-run/config validation
-- direct companion syntax check
-- VPS cloud-agent syntax check
-
-README/version/HANDOFF commits were added after that successful UI run, so the exact latest head still requires a final green CI run before merge.
+- [x] Phase 5 merged and final CI verified.
+- [x] Research `DMT_Project.getCurrentProjectInfo()` and detailed project-tree contract.
+- [x] Verify schematic/page and PCB UUID contracts.
+- [x] Verify `DMT_EditorControl.openDocument(documentUuid, splitScreenId?)` exists.
+- [x] Explicitly reject `DMT_Project.openProject()` for Phase 6 due documented unsaved-data-loss risk.
+- [ ] Create Phase 6 branch from current `main`.
+- [ ] Add bounded current-project document parser/API.
+- [ ] Add validated `openCurrentProjectDocument(uuid)` command.
+- [ ] Add tests before UI integration.
+- [ ] Add iPad Current Project Documents UI only after API/tests are green.
+- [ ] Update README/version/HANDOFF, final CI, merge.
 
 ## Safety / correctness rules carried forward
 
@@ -211,4 +179,4 @@ At each meaningful milestone:
 
 ## Next action
 
-Identify the exact latest PR #6 head after README/package/HANDOFF updates, verify its GitHub Actions CI run is `success`, confirm PR #6 is mergeable, then merge. After merge, create a new branch for the next capability instead of extending this PR.
+Create a new Phase 6 branch from current `main`, implement and test a bounded current-project document list plus validated `openDocument(documentUuid)` workflow, then run CI before adding the iPad project-document browser UI.

@@ -3,7 +3,9 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]
+    branches:
+      - main
+      - work/BUILD-008/chat-20260921T135900Z-agent1-build008
 
 jobs:
   build:
@@ -17,8 +19,19 @@ jobs:
         with:
           node-version: 22
 
-      - name: Install dependencies
-        run: npm install --no-audit --no-fund
+      - name: Generate lockfile bootstrap
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+
+      - name: Upload generated lockfile
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-008-package-lock
+          path: package-lock.json
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Install dependencies from generated lockfile
+        run: npm ci --no-audit --no-fund
 
       - name: Test EasyEDA command layer
         run: npm test

@@ -149,7 +149,7 @@ PR #19 final functional diff was `src/App.tsx` only (+113/−3). Exact-head CI r
 
 Cloudflare has **not yet been deployed** for this project. Repository code/config is pre-deploy ready; deployment itself still needs to be performed.
 
-The current `main` has a green push CI on commit `080f5080e96bd573d72c00f2ad568e09768e9e25`, including tests, web build, Worker typecheck, `wrangler deploy --dry-run`, and companion syntax checks.
+The pre-deploy application baseline `080f5080e96bd573d72c00f2ad568e09768e9e25` has green push CI run `35640891560`, including tests, web build, Worker typecheck, `wrangler deploy --dry-run`, and companion syntax checks. Later changes are coordination/documentation only.
 
 Initial deployment requires only account-side/runtime setup:
 

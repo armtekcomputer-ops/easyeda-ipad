@@ -7,6 +7,7 @@ Last updated: 2026-09-21 (Asia/Bangkok)
 Repository: `armtekcomputer-ops/easyeda-ipad`
 Branch in progress: `feat/selection-sync`
 Base: `main`
+PR: `#4`
 Phase 3 merge commit: `ee30dad2c0e67fe3adc65b1c2ca31627bd17c5c5`
 
 This file is the operational handoff. Continue work from this file first, not from chat memory.
@@ -112,18 +113,40 @@ Decision: after every successful selection mutation, explicitly call `getSnapsho
 - [x] Mutation failures use the existing sanitized snapshot/API error display.
 - [x] Add inspector styling for disabled actions, selection action grouping, bounded/truncated values, and API errors.
 - [x] Prefer explicit refresh because documented event listeners are extension-only.
-- [ ] Open PR #4 and run CI.
-- [ ] Fix any CI failure on this branch.
-- [ ] Update README/package version and final HANDOFF after green CI.
+- [x] Open PR #4.
+- [x] First PR #4 CI run `35594764722` passed tests, PWA build, Worker typecheck, Wrangler dry-run, direct companion syntax, and VPS cloud-agent syntax.
+- [x] Update README with Phase 4 behavior and verified mutation APIs.
+- [x] Bump package version to `0.4.0`.
+- [ ] Verify CI on the latest README/version/HANDOFF head.
 - [ ] Merge PR #4 only when the latest head is green.
 
-## Files changed so far in Phase 4
+## Files changed in Phase 4
 
 - `HANDOFF.md`
+- `README.md`
+- `package.json`
 - `src/lib/easyeda-api.ts`
 - `src/lib/easyeda-selection.test.ts`
 - `src/App.tsx`
 - `src/styles.css`
+
+## CI history
+
+### PR #4 run 1
+
+GitHub Actions run `35594764722` completed successfully on code/UI head `0dd444f6bd423e651f597856978488c25d6f6441`.
+
+Passed:
+
+- dependency installation
+- EasyEDA command-layer tests
+- PWA TypeScript/Vite build
+- Worker type generation/typecheck
+- Wrangler deploy dry-run / config validation
+- direct companion syntax check
+- VPS cloud-agent syntax check
+
+Documentation/version/HANDOFF commits were added after that run, so the latest head must still receive a green CI result before merge.
 
 ## Safety / correctness rules
 
@@ -147,4 +170,4 @@ At each meaningful milestone:
 
 ## Next action
 
-Re-read this HANDOFF, compare the branch to `main`, open PR #4 for Phase 4 Selection Sync, and let GitHub Actions validate tests, TypeScript/Vite, Worker types, Wrangler dry-run, and companion syntax. Fix failures on the same branch before documentation/version finalization.
+Re-read this HANDOFF, identify the latest PR #4 head SHA after README/package/HANDOFF updates, wait for its GitHub Actions CI run, and merge PR #4 only if that exact head is green and mergeable. After merge, start a new branch/HANDOFF loop for the next capability rather than extending this selection-only PR.

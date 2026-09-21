@@ -131,38 +131,39 @@ Merged R6 pending-request hardening:
 
 Final exact-head CI for PR #12 was `35621474276` on `e6bc586e84c1b03fcdbac1f1e6d7630ee48cdb24` and succeeded. CI is not live-device validation.
 
+### Integrated review queue — verified 2026-09-21 UTC
+
+Reviewed application baseline: `ab4364e7769ca7be3be4e26f935c503180142f88`. Later coordination commits do not change application behavior.
+
+| Task | Merged PR | Final PR head | Merge commit |
+| --- | --- | --- | --- |
+| BUILD-008 | [#10](https://github.com/armtekcomputer-ops/easyeda-ipad/pull/10) | `fb8712a9e222f465d086d5e9d87f14a6188b6427` | `1e301302095d0d7582c981e24c9a083bd258ebca` |
+| TEST-008 | [#13](https://github.com/armtekcomputer-ops/easyeda-ipad/pull/13) | `a5052249ba636568615ff3b082218bcb5402e15c` | `4d8ae2101b80a38faeefef12b89eb6fb0f55817b` |
+| UX-007 | [#14](https://github.com/armtekcomputer-ops/easyeda-ipad/pull/14) | `565c19372ea60770a6d6ab620845e7a34213c2ec` | `21d9e0b16424cbe7e63fa74e60403257151ca753` |
+| VIEW-001 | [#9](https://github.com/armtekcomputer-ops/easyeda-ipad/pull/9) | `e1562af6078aa6031a8225e9f1be264ff05ad08e` | `34847b05cf979bc5e16b2f4a5394e3ba6390bae7` |
+| EDIT-005 | [#15](https://github.com/armtekcomputer-ops/easyeda-ipad/pull/15) | `d2d2ff40c83acf0e3be522e7152b631f028cc456` | `ab4364e7769ca7be3be4e26f935c503180142f88` |
+
+- BUILD-008: lockfile-backed installs and CI using npm ci are merged.
+- TEST-008: transport auth/routing/disconnect/malformed-frame and UTF-8 payload-bound coverage is merged, including the browser-side 128 KiB execute-code limit.
+- UX-007: the local canvas is explicitly a preview/control surface; unsupported mock editing tools are hidden.
+- VIEW-001: feasibility research is merged at `docs/research/real-board-viewer.md`. This is research, not a live full-board renderer. BETA geometry enumeration is not promoted to the trusted production path.
+- EDIT-005: PR #15 adds a guarded command layer for a single PCB/schematic component, excluding footprint mutation. It checks documentType + uuid + tabId inside the execute request before lookup/mutation, rejects locked PCB components, bounds each action to one fixed nudge/rotation, and requires successful read-back. This later phase is separate from the read-only Phase 7 inspector.
+- PR #5 is closed without merge and superseded by #15. Do not revive its stale App/HANDOFF branch.
+- These merge facts were checked through GitHub PR records; no new test run or live-device validation is implied.
+
 ## Remaining work
 
-### TEST-008 — ready to claim
+### COORD-002 / issue #17
 
-Add broader transport behavior tests for:
+This correction reconciles HANDOFF with the integrated review queue. WORKBOARD stays canonical on remote main and must never be replaced by a stale feature-branch copy. After this correction reaches main, refresh PRs/board, update the affected task rows, and explicitly release only the reconciled completed-task reservations. Preserve historical events and other owners.
 
-- auth;
-- routing;
-- disconnect handling;
-- malformed frames;
-- payload bounds;
-- protocol behavior across the now-merged REL-005 reconnect/timeout paths.
+### EDIT-006 / issue #16 / PR #19
 
-### UX-007 — ready to claim
+At verification, PR #19 remains open at head `d01945d42d64609c424ce8ac49cab4118df2335a`, branch `work/EDIT-006/inspector-transform-ui`. It proposes inspector controls for the merged transform layer. Open PR code is not a merged UI capability. Do not duplicate or take over its implementation. Re-fetch its current head and CI before review/integration; merge requires applicable explicit authorization.
 
-Clarify that the local canvas is a preview/control surface rather than a complete live EasyEDA editor. Disable or hide unimplemented tools that could imply unsupported editing.
+### LIVE-001 / issue #18
 
-### BUILD-008 / PR #10
-
-PR #10 remains separate and in review. It adds lockfile-backed reproducible npm installs and CI use of `npm ci`. Merge only with explicit authorization.
-
-### VIEW-001 / PR #9
-
-Research-only real-board viewer feasibility work remains separate. Do not promote BETA geometry enumeration to the trusted production path without an explicit decision and bounded validation.
-
-### EDIT-005 / PR #5
-
-Transform/mutation work remains separate and blocked pending an explicit editing-scope review. Do not merge automatically.
-
-### LIVE-001
-
-Actual iPad + EasyEDA Pro/API Gateway end-to-end validation is still pending. CI does not count as live-device validation.
+Actual iPad + deployed Worker/Durable Object + PC companion + EasyEDA Pro/API Gateway end-to-end validation is pending. Record app SHA, device/browser and EasyEDA versions, connection/recovery and trusted-state behavior. Test transform UI only after EDIT-006 is integrated. No deployed endpoint, real-device session or live evidence was available in this coordination run. CI does not satisfy this gate.
 
 ## Security / trust model
 
@@ -181,12 +182,10 @@ The PC-companion architecture, CORE-008 implementation, and REL-005 reliability 
 
 ## Next actions
 
-1. Claim TEST-008 against the merged REL-005 protocol.
-2. Claim UX-007 independently; `src/App.tsx` is available.
-3. Integrate BUILD-008 / PR #10 only under explicit merge authorization.
-4. Complete VIEW-001 research independently.
-5. Perform LIVE-001 against the integrated main candidate and record real iPad/EasyEDA versions/results.
-6. Keep PR #5 mutation work separate until explicitly reviewed.
+1. Integrate the COORD-002 HANDOFF correction only with applicable authorization, then reconcile remote main WORKBOARD and release completed-task reservations. Do not merge branch-local WORKBOARD.
+2. Review the existing EDIT-006 PR #19 against its current head and actual CI; do not create another transform UI PR.
+3. Complete LIVE-001 with real devices and record results in issue #18.
+4. Keep any future full-board BETA viewer work in a separately authorized scope.
 
 ## Completion rules
 

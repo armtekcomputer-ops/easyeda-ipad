@@ -1,12 +1,13 @@
 export type GatewayState = 'disconnected' | 'connecting' | 'connected' | 'error';
 
 type GatewayMessage = {
-  type: 'handshake' | 'execute' | 'result' | 'error' | 'ping' | 'pong';
+  type: 'handshake' | 'execute' | 'result' | 'error' | 'ping' | 'pong' | 'companion-status';
   id?: string;
   service?: string;
   clientType?: string;
   result?: unknown;
   error?: string;
+  edaConnected?: boolean;
   timestamp?: number;
 };
 
@@ -33,19 +34,27 @@ export class EasyEdaGatewayClient extends EventTarget {
     const socket = new WebSocket(url);
     this.socket = socket;
 
-    socket.addEventListener('message', (event) => this.handleMessage(event));
+    socket.addEventListener('message', (event) => {
+      if (this.socket !== socket) return;
+      this.handleMessage(socket, event);
+    });
     socket.addEventListener('close', () => {
+      if (this.socket !== socket) return;
+      this.socket = null;
       this.stopHeartbeat();
       this.rejectPending(new Error('Gateway connection closed'));
       this.setState('disconnected');
     });
-    socket.addEventListener('error', () => this.setState('error'));
+    socket.addEventListener('error', () => {
+      if (this.socket === socket) this.setState('error');
+    });
   }
 
   disconnect(): void {
-    this.stopHeartbeat();
-    this.socket?.close();
+    const socket = this.socket;
     this.socket = null;
+    this.stopHeartbeat();
+    socket?.close();
     this.rejectPending(new Error('Gateway disconnected'));
     this.setState('disconnected');
   }
@@ -79,7 +88,7 @@ export class EasyEdaGatewayClient extends EventTarget {
     });
   }
 
-  private handleMessage(event: MessageEvent<string>): void {
+  private handleMessage(socket: WebSocket, event: MessageEvent<string>): void {
     let message: GatewayMessage;
     try {
       message = JSON.parse(event.data) as GatewayMessage;
@@ -90,7 +99,7 @@ export class EasyEdaGatewayClient extends EventTarget {
     if (message.type === 'handshake') {
       if (message.service !== 'easyeda-bridge') {
         this.setState('error');
-        this.socket?.close();
+        socket.close();
         return;
       }
       this.setState('connected');
@@ -99,7 +108,7 @@ export class EasyEdaGatewayClient extends EventTarget {
     }
 
     if (message.type === 'ping') {
-      this.socket?.send(JSON.stringify({
+      socket.send(JSON.stringify({
         type: 'pong',
         id: message.id,
         timestamp: Date.now(),

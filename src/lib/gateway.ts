@@ -1,13 +1,23 @@
 export type GatewayState = 'disconnected' | 'connecting' | 'connected' | 'error';
 
+export type GatewayStatus = {
+  via?: string;
+  vpsConnected?: boolean;
+  edaConnected?: boolean;
+  localBridgePort?: number | null;
+};
+
 type GatewayMessage = {
-  type: 'handshake' | 'execute' | 'result' | 'error' | 'ping' | 'pong' | 'companion-status';
+  type: 'handshake' | 'execute' | 'result' | 'error' | 'ping' | 'pong' | 'companion-status' | 'relay-status';
   id?: string;
   service?: string;
   clientType?: string;
   result?: unknown;
   error?: string;
+  via?: string;
+  vpsConnected?: boolean;
   edaConnected?: boolean;
+  localBridgePort?: number | null;
   timestamp?: number;
 };
 
@@ -44,6 +54,7 @@ export class EasyEdaGatewayClient extends EventTarget {
       this.stopHeartbeat();
       this.rejectPending(new Error('Gateway connection closed'));
       this.setState('disconnected');
+      this.dispatchStatus({ vpsConnected: false, edaConnected: false });
     });
     socket.addEventListener('error', () => {
       if (this.socket === socket) this.setState('error');
@@ -57,6 +68,7 @@ export class EasyEdaGatewayClient extends EventTarget {
     socket?.close();
     this.rejectPending(new Error('Gateway disconnected'));
     this.setState('disconnected');
+    this.dispatchStatus({ vpsConnected: false, edaConnected: false });
   }
 
   async execute<T = unknown>(code: string, timeoutMs = 30_000): Promise<T> {
@@ -103,7 +115,22 @@ export class EasyEdaGatewayClient extends EventTarget {
         return;
       }
       this.setState('connected');
+      this.dispatchStatus({
+        via: message.via,
+        vpsConnected: message.vpsConnected,
+        edaConnected: message.edaConnected,
+      });
       this.startHeartbeat();
+      return;
+    }
+
+    if (message.type === 'relay-status' || message.type === 'companion-status') {
+      this.dispatchStatus({
+        via: message.via,
+        vpsConnected: message.vpsConnected,
+        edaConnected: message.edaConnected,
+        localBridgePort: message.localBridgePort,
+      });
       return;
     }
 
@@ -156,6 +183,10 @@ export class EasyEdaGatewayClient extends EventTarget {
       request.reject(error);
     }
     this.pending.clear();
+  }
+
+  private dispatchStatus(status: GatewayStatus): void {
+    this.dispatchEvent(new CustomEvent<GatewayStatus>('statuschange', { detail: status }));
   }
 
   private setState(next: GatewayState): void {

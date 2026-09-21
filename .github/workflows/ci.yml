@@ -23,5 +23,14 @@ jobs:
       - name: Build web app
         run: npm run build
 
-      - name: Syntax-check desktop companion
+      - name: Generate Worker types and typecheck
+        run: npm run worker:typecheck
+
+      - name: Validate Worker bundle and config
+        run: npx wrangler deploy --dry-run --outdir .wrangler-dry-run
+
+      - name: Syntax-check direct companion
         run: node --check companion/server.mjs
+
+      - name: Syntax-check VPS cloud agent
+        run: node --check companion/cloud-agent.mjs

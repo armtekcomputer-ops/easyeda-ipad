@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useCanvasViewport } from './hooks/useCanvasViewport';
-import { EasyEdaGatewayClient, type GatewayState } from './lib/gateway';
+import { EasyEdaGatewayClient, type GatewayState, type GatewayStatus } from './lib/gateway';
 
 const tools = [
   { id: 'select', label: 'Select', glyph: '↖' },
@@ -11,6 +11,7 @@ const tools = [
 ] as const;
 
 type ToolId = (typeof tools)[number]['id'];
+type ConnectionMode = 'cloud' | 'direct';
 
 function stateLabel(state: GatewayState) {
   if (state === 'connected') return 'Connected';
@@ -19,10 +20,31 @@ function stateLabel(state: GatewayState) {
   return 'Offline';
 }
 
+function yesNoUnknown(value: boolean | undefined) {
+  if (value === undefined) return 'Unknown';
+  return value ? 'Online' : 'Offline';
+}
+
+function cloudSocketUrl(session: string, token: string) {
+  const url = new URL(window.location.origin);
+  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+  url.pathname = '/ws/ipad';
+  url.search = '';
+  url.searchParams.set('session', session);
+  url.searchParams.set('token', token);
+  return url.toString();
+}
+
 export default function App() {
   const gateway = useMemo(() => new EasyEdaGatewayClient(), []);
   const [gatewayState, setGatewayState] = useState<GatewayState>('disconnected');
+  const [gatewayStatus, setGatewayStatus] = useState<GatewayStatus>({});
+  const [connectionMode, setConnectionMode] = useState<ConnectionMode>(() => (
+    localStorage.getItem('easyeda-ipad-mode') === 'direct' ? 'direct' : 'cloud'
+  ));
   const [gatewayUrl, setGatewayUrl] = useState(() => localStorage.getItem('easyeda-ipad-gateway') ?? '');
+  const [cloudSession, setCloudSession] = useState(() => localStorage.getItem('easyeda-ipad-session') ?? 'default');
+  const [cloudToken, setCloudToken] = useState(() => sessionStorage.getItem('easyeda-ipad-token') ?? '');
   const [activeTool, setActiveTool] = useState<ToolId>('select');
   const { zoom, offset, inputMode, resetView, handlers } = useCanvasViewport();
 
@@ -30,16 +52,22 @@ export default function App() {
     const onStateChange = (event: Event) => {
       setGatewayState((event as CustomEvent<GatewayState>).detail);
     };
+    const onStatusChange = (event: Event) => {
+      const next = (event as CustomEvent<GatewayStatus>).detail;
+      setGatewayStatus((current) => ({ ...current, ...next }));
+    };
     gateway.addEventListener('statechange', onStateChange);
+    gateway.addEventListener('statuschange', onStatusChange);
     return () => {
       gateway.removeEventListener('statechange', onStateChange);
+      gateway.removeEventListener('statuschange', onStatusChange);
       gateway.disconnect();
     };
   }, [gateway]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.target instanceof HTMLInputElement) return;
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) return;
       if (event.key === '1') setActiveTool('select');
       if (event.key === '2') setActiveTool('wire');
       if (event.key === '3') setActiveTool('route');
@@ -49,11 +77,28 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [resetView]);
 
+  const canConnect = connectionMode === 'cloud'
+    ? Boolean(cloudSession.trim() && cloudToken.trim())
+    : Boolean(gatewayUrl.trim());
+
   const toggleConnection = () => {
     if (gatewayState === 'connected' || gatewayState === 'connecting') {
       gateway.disconnect();
       return;
     }
+
+    localStorage.setItem('easyeda-ipad-mode', connectionMode);
+
+    if (connectionMode === 'cloud') {
+      const session = cloudSession.trim();
+      const token = cloudToken.trim();
+      if (!session || !token) return;
+      localStorage.setItem('easyeda-ipad-session', session);
+      sessionStorage.setItem('easyeda-ipad-token', token);
+      gateway.connect(cloudSocketUrl(session, token));
+      return;
+    }
+
     const url = gatewayUrl.trim();
     if (!url) return;
     localStorage.setItem('easyeda-ipad-gateway', url);
@@ -136,26 +181,67 @@ export default function App() {
 
             {gatewayState !== 'connected' && (
               <div className="gateway-card" onPointerDown={(event) => event.stopPropagation()}>
-                <span className="eyebrow">DESKTOP COMPANION</span>
+                <span className="eyebrow">CONNECTION</span>
                 <h2>Connect to EasyEDA</h2>
-                <p>Enter the secure companion WebSocket URL running on the desktop that hosts EasyEDA Pro.</p>
+                <p>Cloud mode connects this PWA through Cloudflare to the outbound VPS agent. Direct mode keeps the original LAN companion option.</p>
+
                 <label>
-                  Gateway URL
-                  <input
-                    value={gatewayUrl}
-                    onChange={(event) => setGatewayUrl(event.target.value)}
-                    placeholder="ws://192.168.1.20:49700"
-                    inputMode="url"
-                    autoCapitalize="none"
-                    autoCorrect="off"
-                    spellCheck={false}
-                  />
+                  Mode
+                  <select
+                    value={connectionMode}
+                    onChange={(event) => setConnectionMode(event.target.value as ConnectionMode)}
+                  >
+                    <option value="cloud">Cloudflare + VPS</option>
+                    <option value="direct">Direct / LAN companion</option>
+                  </select>
                 </label>
+
+                {connectionMode === 'cloud' ? (
+                  <>
+                    <label>
+                      Session
+                      <input
+                        value={cloudSession}
+                        onChange={(event) => setCloudSession(event.target.value)}
+                        placeholder="default"
+                        autoCapitalize="none"
+                        autoCorrect="off"
+                        spellCheck={false}
+                      />
+                    </label>
+                    <label>
+                      iPad access token
+                      <input
+                        type="password"
+                        value={cloudToken}
+                        onChange={(event) => setCloudToken(event.target.value)}
+                        placeholder="Cloudflare IPAD_TOKEN"
+                        autoCapitalize="none"
+                        autoCorrect="off"
+                        spellCheck={false}
+                      />
+                    </label>
+                  </>
+                ) : (
+                  <label>
+                    Gateway URL
+                    <input
+                      value={gatewayUrl}
+                      onChange={(event) => setGatewayUrl(event.target.value)}
+                      placeholder="ws://192.168.1.20:49700/ipad?token=..."
+                      inputMode="url"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
+                    />
+                  </label>
+                )}
+
                 <button
                   className="primary-button wide"
                   type="button"
                   onClick={toggleConnection}
-                  disabled={!gatewayUrl.trim() || gatewayState === 'connecting'}
+                  disabled={!canConnect || gatewayState === 'connecting'}
                 >
                   {gatewayState === 'connecting' ? 'Connecting…' : 'Connect'}
                 </button>
@@ -193,6 +279,13 @@ export default function App() {
               <span>Status</span>
               <strong className={`status-text status-${gatewayState}`}>{stateLabel(gatewayState)}</strong>
             </div>
+            <div className="setting-row"><span>Mode</span><strong>{connectionMode === 'cloud' ? 'Cloudflare' : 'Direct'}</strong></div>
+            {connectionMode === 'cloud' && <div className="setting-row"><span>Session</span><strong>{cloudSession || 'default'}</strong></div>}
+            <div className="setting-row"><span>VPS relay</span><strong>{yesNoUnknown(gatewayStatus.vpsConnected)}</strong></div>
+            <div className="setting-row"><span>EasyEDA</span><strong>{yesNoUnknown(gatewayStatus.edaConnected)}</strong></div>
+            {gatewayStatus.localBridgePort && (
+              <div className="setting-row"><span>Bridge</span><strong>:{gatewayStatus.localBridgePort}</strong></div>
+            )}
             {gatewayState === 'connected' && (
               <button className="secondary-button wide" type="button" onClick={toggleConnection}>Disconnect</button>
             )}

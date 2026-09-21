@@ -28,9 +28,9 @@ body {
   -webkit-touch-callout: none;
 }
 
-button, input { font: inherit; }
+button, input, select { font: inherit; }
 button { min-width: 44px; min-height: 44px; touch-action: manipulation; }
-input { -webkit-user-select: text; user-select: text; }
+input, select { -webkit-user-select: text; user-select: text; }
 
 .app-shell {
   width: 100dvw;
@@ -206,7 +206,8 @@ input { -webkit-user-select: text; user-select: text; }
 .gateway-card h2 { margin: 4px 0 7px; font-size: 18px; }
 .gateway-card p { margin: 0 0 14px; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .gateway-card label { display: grid; gap: 6px; color: #cbd5e1; font-size: 11px; font-weight: 700; }
-.gateway-card input {
+.gateway-card input,
+.gateway-card select {
   width: 100%;
   height: 46px;
   padding: 0 12px;
@@ -217,7 +218,8 @@ input { -webkit-user-select: text; user-select: text; }
   color: #e5e7eb;
   margin-bottom: 10px;
 }
-.gateway-card input:focus { border-color: #60a5fa; box-shadow: 0 0 0 3px rgba(96,165,250,0.12); }
+.gateway-card input:focus,
+.gateway-card select:focus { border-color: #60a5fa; box-shadow: 0 0 0 3px rgba(96,165,250,0.12); }
 
 .inspector {
   padding: 16px max(14px, env(safe-area-inset-right)) 16px 14px;

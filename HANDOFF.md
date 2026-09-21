@@ -63,34 +63,42 @@ EasyEDA Pro on VPS
 - Use separate secrets for iPad and VPS roles (`IPAD_TOKEN`, `VPS_TOKEN`).
 - VPS initiates outbound WSS to Cloudflare; Cloudflare never needs inbound access to the VPS local bridge.
 - Default session ID: `default`.
+- Wrangler config uses the 2026 declarative Durable Object `exports` model with SQLite storage.
 
 ## Phase 2 deliverables
 
-1. Add `wrangler.jsonc` with static assets + Durable Object binding/migration.
-2. Add Worker code with:
-   - `/api/health`
-   - `/api/session/:session/status`
-   - `/ws/ipad?session=...&token=...`
-   - `/ws/vps?session=...&token=...`
-3. Add Durable Object relay:
-   - authenticate role before upgrading
-   - one active VPS socket per session
-   - zero or more iPad sockets
-   - forward `execute` iPad -> VPS
-   - route `result`/`error` VPS -> originating iPad
-   - forward connection/status events
-   - enforce payload size limit
-   - preserve routing state across hibernation using WebSocket attachments
-4. Add `companion/cloud-agent.mjs`:
-   - scan `127.0.0.1:49620-49629`
-   - connect outbound to Cloudflare `/ws/vps`
-   - relay execute/result/error
-   - reconnect with backoff
-5. Update PWA defaults/settings for Cloudflare hosted mode.
-6. Add npm scripts for Worker dev/deploy and cloud agent.
-7. Update README with VPS + Cloudflare deployment steps and secrets.
-8. Extend CI to typecheck Worker and syntax-check cloud agent.
-9. Open PR, run CI, fix failures, merge when green.
+- [x] Add `wrangler.jsonc` with static assets + Durable Object binding/export.
+- [x] Add Worker code with:
+  - `/api/health`
+  - `/api/session/:session/status`
+  - `/ws/ipad?session=...&token=...`
+  - `/ws/vps?session=...&token=...`
+- [x] Add Durable Object relay:
+  - authenticate role before upgrading
+  - one active VPS socket per session
+  - zero or more iPad sockets
+  - forward `execute` iPad -> VPS
+  - route `result`/`error` VPS -> originating iPad
+  - forward relay/VPS status events
+  - enforce payload size limit
+  - preserve client routing across hibernation using WebSocket attachments and self-contained relay IDs
+- [ ] Add `companion/cloud-agent.mjs`:
+  - scan `127.0.0.1:49620-49629`
+  - connect outbound to Cloudflare `/ws/vps`
+  - relay execute/result/error
+  - reconnect with backoff
+- [ ] Update PWA defaults/settings for Cloudflare hosted mode.
+- [ ] Add npm scripts for Worker dev/deploy and cloud agent.
+- [ ] Update README with VPS + Cloudflare deployment steps and secrets.
+- [ ] Extend CI to generate/check Worker types, typecheck Worker, and syntax-check cloud agent.
+- [ ] Open PR, run CI, fix failures, merge when green.
+
+## Files added in current branch
+
+- `wrangler.jsonc`
+- `worker/tsconfig.json`
+- `worker/index.ts`
+- `HANDOFF.md`
 
 ## Security requirements
 
@@ -112,4 +120,4 @@ At each meaningful milestone:
 
 ## Next action
 
-Implement Cloudflare Worker + Durable Object relay and Wrangler configuration.
+Implement `companion/cloud-agent.mjs` for VPS outbound WSS relay to Cloudflare.

@@ -1,7 +1,7 @@
 # Shared multi-chat work board
 
 Canonical source: `armtekcomputer-ops/easyeda-ipad`, branch `main`, path `WORKBOARD.md`.
-Updated: 2026-09-21T18:41:00Z. All timestamps use UTC ISO 8601.
+Updated: 2026-09-21T18:49:00Z. All timestamps use UTC ISO 8601.
 This file tracks ownership and unfinished work; `HANDOFF.md` tracks verified product state and decisions.
 
 ## Required workflow
@@ -262,3 +262,18 @@ This section is the current-state override for stale task/reservation rows above
 - Reconciliation finding: the current PR diff rewrites/removes hundreds of lines from `src/App.tsx`, including current preview/control-surface and inspector behavior, so the existing head is not acceptable for integration despite its older green CI.
 - Authorized scope: preserve current `main` App behavior and add only the guarded single-component transform controls already backed by merged EDIT-005. No free-form IDs/coordinates, footprint mutation, routing/wire/via/text editing, save/create/delete, or full-board editing.
 - Exact next action: rebuild the PR branch from current `main` App semantics with the narrow transform UI, run exact-head CI, inspect the final diff, and integrate only if the destructive stale rewrite is eliminated and acceptance is satisfied.
+
+### EDIT-006 completion — 2026-09-21T18:49:00Z
+
+- Task/owner/run: EDIT-006 / `chatgpt-auto-easyeda` / `chatgpt-auto-easyeda-20260921T184100Z`.
+- State: `done`.
+- The stale PR #19 App rewrite was neutralized by reconciling current `main` into the existing branch without force-push; no duplicate PR was created.
+- Final functional diff: `src/App.tsx` only, +113/−3, preserving current preview/control-surface, selection sync, component inspector, editor navigation, project-document browsing, and connection UI.
+- Final PR head: `35660f4693bd16a7fd253da1d71419ec37d69da3`.
+- Exact-head CI: run `35640383362` succeeded; tests, web build, Worker typecheck/dry-run, and companion syntax checks all passed.
+- PR #19 merged to `main` as `ebe35749ae41c23294298cabac7d65672d53760b`; issue #16 closed as completed.
+- Merged scope: fixed-step X−/X+/Y−/Y+ and ±90° rotation for exactly one trusted PCB/schematic component; footprint mutation excluded; trusted document identity checked inside the transform execute request; state invalidated before write and restored only by fresh read-back.
+- Reservation `src/App.tsx` is released.
+- No open pull requests remain after this integration.
+- LIVE-001 / issue #18 remains the only open task observed. It is an external real-device validation gate requiring a real iPad, deployed Worker/Durable Object, PC companion, EasyEDA Pro, and API Gateway. CI does not satisfy it and this automation must not invent live evidence.
+- Exact next action: perform LIVE-001 on the real deployment/device stack and record the evidence in issue #18. No additional repository-only task is currently ready to claim.

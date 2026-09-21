@@ -7,6 +7,7 @@ Last updated: 2026-09-21 (Asia/Bangkok)
 Repository: `armtekcomputer-ops/easyeda-ipad`
 Branch in progress: `feat/easyeda-api-integration`
 Base: `main`
+PR: `#3`
 Phase 2 merge commit: `8e95794f8189edf2cd064145afb874a2bf21152a`
 
 This file is the operational handoff. Continue work from this file first, not from chat memory.
@@ -34,16 +35,6 @@ EasyEDA bridge 127.0.0.1:49620-49629
   v
 EasyEDA Pro on VPS
 ```
-
-## Completed Phase 2
-
-- Cloudflare-hosted PWA + Durable Object relay.
-- Separate `IPAD_TOKEN` and `VPS_TOKEN` authentication.
-- VPS outbound-only cloud agent.
-- Direct/LAN fallback companion retained.
-- Cloudflare/VPS/EasyEDA status reporting in the PWA.
-- Wrangler deployment flow and CI validation.
-- PR #2 merged successfully after green CI.
 
 ## Phase 3 goal
 
@@ -92,16 +83,11 @@ Schematic namespace: `eda.sch_SelectControl`
 
 Selection mutation APIs exist but are deliberately disabled in this milestone.
 
-### Primitive/property access
-
-- Schematic generic getter exists: `eda.sch_Primitive.getPrimitiveByPrimitiveId(id)`.
-- PCB `PCB_Primitive` reference currently has no generic `getPrimitiveByPrimitiveId`; current snapshot uses selected primitive objects returned by `pcb_SelectControl`.
-
 ### Undo / redo
 
 No public undo/redo API was found in the current official API-skill references. Do not implement or guess it.
 
-## Phase 3 implementation completed on current branch
+## Phase 3 implementation
 
 - [x] Research official EasyEDA API names and supported operations.
 - [x] Add `src/lib/easyeda-api.ts` typed read-only command layer.
@@ -113,16 +99,19 @@ No public undo/redo API was found in the current official API-skill references. 
 - [x] Add Vitest command-generation/validation tests.
 - [x] Add `npm test` to CI.
 - [x] Wire snapshot refresh/state into the PWA UI.
-- [x] Replace misleading write controls in the top bar with a read-only `Refresh from EasyEDA` action for this milestone.
-- [x] Show live snapshot document type, project/context name, selection count/first ID, and capture timestamp in the inspector.
-- [x] Surface API/validation errors as UI state without showing tokens or generated execute code.
-- [ ] Run CI on a PR and fix failures.
-- [ ] Update README with Phase 3 read-only behavior.
-- [ ] Merge first read-only integration when green.
+- [x] Replace misleading top-level write controls with `Refresh from EasyEDA` for this read-only milestone.
+- [x] Show document type, project/context, selection count/first ID, and capture timestamp.
+- [x] Surface API/validation errors without showing tokens or generated code.
+- [x] Open PR #3.
+- [x] First PR #3 CI run (`35592936289`) passed tests, PWA build, Worker typecheck, Wrangler dry-run, and both companion syntax checks.
+- [x] Update README with Phase 3 behavior and verified API list.
+- [ ] Verify CI on the latest documentation/HANDOFF head.
+- [ ] Merge PR #3 when latest head is green.
 
 ## Files changed in Phase 3
 
 - `HANDOFF.md`
+- `README.md`
 - `src/lib/easyeda-api.ts`
 - `src/lib/easyeda-api.test.ts`
 - `src/App.tsx`
@@ -149,4 +138,4 @@ At each meaningful milestone:
 
 ## Next action
 
-Re-read this HANDOFF, open a Phase 3 PR, let GitHub Actions run tests + TypeScript/Vite + Worker/Wrangler validation, fix all failures on this branch, then update README/HANDOFF and merge only when the current head is green.
+Re-read this HANDOFF. Check GitHub Actions for the latest branch head after README/HANDOFF changes. If green, verify PR #3 mergeability and squash-merge it into `main`. Then start a fresh branch/HANDOFF loop for the next verified capability rather than adding writes to this read-only PR.

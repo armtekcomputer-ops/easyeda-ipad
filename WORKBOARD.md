@@ -48,11 +48,12 @@ No repository code path is currently reserved. DEPLOY-001 is an external/account
 
 ## Deployment readiness checkpoint — 2026-09-22
 
-- Current pre-deploy main before documentation-only correction: `080f5080e96bd573d72c00f2ad568e09768e9e25`.
+- Pre-deploy application baseline: `080f5080e96bd573d72c00f2ad568e09768e9e25`.
 - Push CI run `35640891560` succeeded on that commit.
 - CI includes `npm ci`, tests, web build, Worker type generation/typecheck, `wrangler deploy --dry-run`, and both companion syntax checks.
 - `wrangler.jsonc` declares Worker entrypoint, Static Assets, SPA fallback, Worker-first `/api/*` and `/ws/*`, `SESSIONS` Durable Object binding, declarative SQLite Durable Object export, and observability.
 - `package-lock.json` is present and CI uses deterministic `npm ci`.
 - `.env` and `.env.*` are ignored; production secrets must be configured in Cloudflare, not committed.
+- Later main changes after the application baseline are documentation/coordination only.
 - Cloudflare production deployment has **not** been performed yet.
 - Exact next action: deploy current `main` using Wrangler/Cloudflare, configure `IPAD_TOKEN` and `VPS_TOKEN`, record the deployment URL and exact deployed commit, verify health/status, then unblock LIVE-001.

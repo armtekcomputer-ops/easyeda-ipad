@@ -120,6 +120,22 @@ describe('open-document result validation', () => {
     });
   });
 
+  it('rejects malformed documentUuid and tabId types rather than coercing them', () => {
+    expect(() => parseEasyEdaOpenProjectDocumentResult({
+      version: 1,
+      ok: true,
+      documentUuid: 123,
+      tabId: 'pcb-tab',
+    })).toThrow(/documentUuid must be a string/i);
+
+    expect(() => parseEasyEdaOpenProjectDocumentResult({
+      version: 1,
+      ok: true,
+      documentUuid: 'pcb-uuid',
+      tabId: 456,
+    })).toThrow(/tabId must be a string or null/i);
+  });
+
   it('rejects inconsistent failures', () => {
     expect(() => parseEasyEdaOpenProjectDocumentResult({
       version: 1,

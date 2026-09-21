@@ -1,4 +1,17 @@
 import { DurableObject } from 'cloudflare:workers';
+import {
+  bearerToken,
+  encodeRelayRoute,
+  isRecord,
+  isWebSocketUpgrade,
+  parseRelayMessage,
+  parseRelayRoute,
+  relayCodeBytesWithinLimit,
+  relayFrameBytesWithinLimit,
+  safeEqual,
+  validSession,
+  type RelayMessage,
+} from './protocol';
 
 interface Bindings {
   ASSETS: Fetcher;
@@ -17,109 +30,13 @@ type SocketAttachment = {
   localBridgePort?: number | null;
 };
 
-type RelayRoute = {
-  clientId: string;
-  originalId: string;
-};
-
-type RelayMessage = {
-  type?: string;
-  id?: string;
-  code?: string;
-  result?: unknown;
-  error?: string;
-  edaConnected?: boolean;
-  localBridgePort?: number | null;
-  timestamp?: number;
-};
-
 const SERVICE_ID = 'easyeda-bridge';
-const MAX_CODE_BYTES = 128 * 1024;
-const MAX_FRAME_BYTES = MAX_CODE_BYTES + 16 * 1024;
-const MAX_MESSAGE_ID_LENGTH = 2048;
-const MAX_ERROR_LENGTH = 4096;
-const SESSION_RE = /^[A-Za-z0-9_-]{1,64}$/;
-const encoder = new TextEncoder();
 
 function json(data: unknown, init: ResponseInit = {}): Response {
   const headers = new Headers(init.headers);
   headers.set('content-type', 'application/json; charset=utf-8');
   headers.set('cache-control', 'no-store');
   return new Response(JSON.stringify(data), { ...init, headers });
-}
-
-function safeEqual(left: string, right: string): boolean {
-  const a = encoder.encode(left);
-  const b = encoder.encode(right);
-  let diff = a.length ^ b.length;
-  const max = Math.max(a.length, b.length);
-  for (let i = 0; i < max; i += 1) {
-    diff |= (a[i] ?? 0) ^ (b[i] ?? 0);
-  }
-  return diff === 0;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function optionalBoundedString(record: Record<string, unknown>, key: string, maxLength: number): boolean {
-  const value = record[key];
-  return value === undefined || (typeof value === 'string' && value.length <= maxLength);
-}
-
-function parseRelayMessage(raw: string): RelayMessage | null {
-  let value: unknown;
-  try {
-    value = JSON.parse(raw);
-  } catch {
-    return null;
-  }
-
-  if (!isRecord(value)) return null;
-  if (value.type !== undefined && (typeof value.type !== 'string' || value.type.length > 64)) return null;
-  if (!optionalBoundedString(value, 'id', MAX_MESSAGE_ID_LENGTH)) return null;
-  if (!optionalBoundedString(value, 'code', MAX_CODE_BYTES)) return null;
-  if (!optionalBoundedString(value, 'error', MAX_ERROR_LENGTH)) return null;
-  if (value.edaConnected !== undefined && typeof value.edaConnected !== 'boolean') return null;
-  if (
-    value.localBridgePort !== undefined
-    && value.localBridgePort !== null
-    && (typeof value.localBridgePort !== 'number'
-      || !Number.isInteger(value.localBridgePort)
-      || value.localBridgePort < 1
-      || value.localBridgePort > 65_535)
-  ) return null;
-  if (value.timestamp !== undefined && (typeof value.timestamp !== 'number' || !Number.isFinite(value.timestamp))) return null;
-
-  return value;
-}
-
-function parseRelayRoute(value: string): RelayRoute | null {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(value);
-  } catch {
-    return null;
-  }
-  if (!isRecord(parsed)) return null;
-  if (typeof parsed.clientId !== 'string' || parsed.clientId.length === 0 || parsed.clientId.length > 128) return null;
-  if (typeof parsed.originalId !== 'string' || parsed.originalId.length === 0 || parsed.originalId.length > MAX_MESSAGE_ID_LENGTH) return null;
-  return { clientId: parsed.clientId, originalId: parsed.originalId };
-}
-
-function bearerToken(request: Request, url: URL): string {
-  const auth = request.headers.get('authorization') ?? '';
-  if (auth.startsWith('Bearer ')) return auth.slice(7).trim();
-  return url.searchParams.get('token') ?? '';
-}
-
-function validSession(value: string | null): value is string {
-  return typeof value === 'string' && SESSION_RE.test(value);
-}
-
-function isWebSocketUpgrade(request: Request): boolean {
-  return request.headers.get('upgrade')?.toLowerCase() === 'websocket';
 }
 
 async function sessionStub(env: Bindings, session: string): Promise<DurableObjectStub> {
@@ -257,7 +174,7 @@ export class EasyEdaSession extends DurableObject<Bindings> {
       this.send(socket, { type: 'error', error: 'Binary frames are not supported', timestamp: Date.now() });
       return;
     }
-    if (encoder.encode(raw).byteLength > MAX_FRAME_BYTES) {
+    if (!relayFrameBytesWithinLimit(raw)) {
       socket.close(1009, 'Message too large');
       return;
     }
@@ -305,7 +222,7 @@ export class EasyEdaSession extends DurableObject<Bindings> {
       this.send(socket, { type: 'error', id: message.id, error: 'Invalid execute request', timestamp: Date.now() });
       return;
     }
-    if (encoder.encode(message.code).byteLength > MAX_CODE_BYTES) {
+    if (!relayCodeBytesWithinLimit(message.code)) {
       this.send(socket, { type: 'error', id: message.id, error: 'Execute payload is too large', timestamp: Date.now() });
       return;
     }
@@ -316,10 +233,15 @@ export class EasyEdaSession extends DurableObject<Bindings> {
       return;
     }
 
-    const route: RelayRoute = { clientId: attachment.clientId, originalId: message.id };
+    const routeId = encodeRelayRoute({ clientId: attachment.clientId, originalId: message.id });
+    if (!routeId) {
+      this.send(socket, { type: 'error', id: message.id, error: 'Invalid relay route', timestamp: Date.now() });
+      return;
+    }
+
     this.send(vps, {
       type: 'execute',
-      id: JSON.stringify(route),
+      id: routeId,
       code: message.code,
       timestamp: Date.now(),
     });

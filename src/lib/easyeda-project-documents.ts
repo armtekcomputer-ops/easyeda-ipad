@@ -215,8 +215,20 @@ export function parseEasyEdaOpenProjectDocumentResult(value: unknown): EasyEdaOp
   if (!isRecord(value)) throw new Error('Invalid EasyEDA open-document result: root must be an object');
   if (value.version !== 1) throw new Error('Invalid EasyEDA open-document result: unsupported version');
   if (typeof value.ok !== 'boolean') throw new Error('Invalid EasyEDA open-document result: ok must be boolean');
-  const documentUuid = normalizeEasyEdaDocumentUuid(String(value.documentUuid ?? ''));
-  const tabId = value.tabId === null ? null : normalizeEasyEdaDocumentUuid(String(value.tabId ?? ''));
+  if (typeof value.documentUuid !== 'string') {
+    throw new Error('Invalid EasyEDA open-document result: documentUuid must be a string');
+  }
+  const documentUuid = normalizeEasyEdaDocumentUuid(value.documentUuid);
+
+  let tabId: string | null;
+  if (value.tabId === null) {
+    tabId = null;
+  } else {
+    if (typeof value.tabId !== 'string') {
+      throw new Error('Invalid EasyEDA open-document result: tabId must be a string or null');
+    }
+    tabId = normalizeEasyEdaDocumentUuid(value.tabId);
+  }
 
   let reason: EasyEdaOpenProjectDocumentFailure | undefined;
   if (value.reason !== undefined) {

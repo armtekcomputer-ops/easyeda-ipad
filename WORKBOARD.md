@@ -1,7 +1,7 @@
 # Shared multi-chat work board
 
 Canonical source: `armtekcomputer-ops/easyeda-ipad`, branch `main`, path `WORKBOARD.md`.
-Updated: 2026-09-21T16:05:00Z. All timestamps use UTC ISO 8601.
+Updated: 2026-09-21T16:11:00Z. All timestamps use UTC ISO 8601.
 This file tracks ownership and unfinished work; `HANDOFF.md` tracks verified product state and decisions.
 
 ## Required workflow
@@ -34,7 +34,7 @@ Use `blocked`, `paused`, or `needs_reconciliation` when appropriate. An expired 
 | chat-20260921T150300Z-agent3-core008 | Agent 3 — CORE-008 takeover | CORE-008 | done | 2026-09-21T15:22:00Z | PR #8 merged as `45f3c607c274e8ccfa93e5687db489d57db1c31a` | Reservation released; residual reliability/testing/UX work can now be claimed |
 | chat-20260921T152500Z-agent3-rel005 | Agent 3 — transport reliability | REL-005 | done | 2026-09-21T15:50:00Z | PR #12 merged as `319d83c518fe1bf166b0e5339bea331d9bd0eb90`; final head `e6bc586e84c1b03fcdbac1f1e6d7630ee48cdb24` | Reservation released; TEST-008 can target merged protocol |
 | chat-20260921T155400Z-agent3-test008 | Agent 3 — transport behavior coverage | TEST-008 | review | 2026-09-21T16:02:00Z | `work/TEST-008/chat-20260921T155400Z-agent3-test008`; head `a5052249ba636568615ff3b082218bcb5402e15c`; PR #13 | Exact-head CI `35622810269` green; merge only with explicit authorization after final main reconciliation |
-| chat-20260921T160500Z-agent3-ux007 | Agent 3 — preview/control-surface UX honesty | UX-007 | in_progress | 2026-09-21T16:05:00Z | `work/UX-007/chat-20260921T160500Z-agent3-ux007` | Clearly label local canvas as preview/control surface and remove/hide unsupported editing tools without touching TEST-008 transport paths |
+| chat-20260921T160500Z-agent3-ux007 | Agent 3 — preview/control-surface UX honesty | UX-007 | review | 2026-09-21T16:11:00Z | `work/UX-007/chat-20260921T160500Z-agent3-ux007`; head `565c19372ea60770a6d6ab620845e7a34213c2ec`; PR #14 | Exact-head CI `35623710644` green; merge only with explicit authorization after final main reconciliation |
 | unknown-pr5 | Existing PR author/chat not yet registered | EDIT-005 | needs_reconciliation | observed 2026-09-21T13:57:50Z | `feat/primitive-transform`; head observed `4180c2f98191fed082927255d57f6372d4b9425b`; PR #5 | Reconcile only after explicit editing-scope review |
 
 ## Tasks
@@ -47,7 +47,7 @@ Use `blocked`, `paused`, or `needs_reconciliation` when appropriate. An expired 
 | REL-005 | P2 | R5 connection deadlines/recovery/status + R6 bounded pending requests | done | chat-20260921T152500Z-agent3-rel005 | PR #12 merged as `319d83c518fe1bf166b0e5339bea331d9bd0eb90`; final exact-head CI `35621474276` success on `e6bc586e84c1b03fcdbac1f1e6d7630ee48cdb24`; reservation released |
 | BUILD-008 | P2 | Deterministic npm install/CI lockfile | review | chat-20260921T135900Z-agent1-build008 | PR #10 head `fb8712a9e222f465d086d5e9d87f14a6188b6427`; CI `35610185239` success; merge requires explicit authorization |
 | TEST-008 | P2 | Transport behavior tests for auth/routing/disconnect/malformed/payload bounds | review | chat-20260921T155400Z-agent3-test008 | PR #13 head `a5052249ba636568615ff3b082218bcb5402e15c`; CI `35622810269` success with 80 tests. Worker auth/routing/envelope/byte-bound coverage and gateway disconnect/reply/malformed-frame coverage added; gateway now rejects >128 KiB execute code locally. |
-| UX-007 | P2 | Clearly mark preview and disable/hide unimplemented tools | in_progress | chat-20260921T160500Z-agent3-ux007 | Reserve `src/App.tsx` and `src/styles.css`; make preview/control-surface status explicit, hide unsupported Wire/Route/Via/Text controls, preserve only controls tied to implemented read/control capabilities. |
+| UX-007 | P2 | Clearly mark preview and disable/hide unimplemented tools | review | chat-20260921T160500Z-agent3-ux007 | PR #14 head `565c19372ea60770a6d6ab620845e7a34213c2ec`; exact-head CI `35623710644` success. Mock drawing rail hidden, canvas explicitly labeled Preview / control surface, unsupported editing stays in EasyEDA Pro. |
 | LIVE-001 | P1 | Actual iPad + live EasyEDA end-to-end validation | todo | unassigned | Integrated main candidate exists; requires real iPad, EasyEDA Pro, API Gateway, Worker/DO deployment and recorded versions/results |
 | VIEW-001 | P2 | Documented read-only real-board viewer feasibility research | claimed | chat-20260921T141000Z-agent2-view001 | PR #9; documentation/research only |
 | OPS-001 | P2 | Deployment/runbook for Worker + Durable Object + outbound PC companion | done | chat-20260921T141500Z-agent3-ops001 | PR #11 merged; runbook on main |
@@ -60,10 +60,10 @@ Use `blocked`, `paused`, or `needs_reconciliation` when appropriate. An expired 
 | BUILD-008 | chat-20260921T135900Z-agent1-build008 | `package.json`; `package-lock.json`; `.github/workflows/ci.yml` | retained through review | Integrate or explicitly abandon, synchronize HANDOFF/board, then release |
 | VIEW-001 | chat-20260921T141000Z-agent2-view001 | `docs/research/real-board-viewer.md` | retained while active | Research reaches review/done or explicit handoff |
 | TEST-008 | chat-20260921T155400Z-agent3-test008 | `src/lib/gateway.ts`; `src/lib/gateway.test.ts`; `worker/index.ts`; `worker/protocol.ts`; `worker/protocol.test.ts` | retained through review | Integrate PR #13 or explicitly abandon/handoff, synchronize HANDOFF/board, then release |
-| UX-007 | chat-20260921T160500Z-agent3-ux007 | `src/App.tsx`; `src/styles.css` | active | PR reaches review/merge or explicit handoff; synchronize HANDOFF/board, then release |
+| UX-007 | chat-20260921T160500Z-agent3-ux007 | `src/styles.css` | retained through review | Integrate PR #14 or explicitly abandon/handoff, synchronize HANDOFF/board, then release |
 | EDIT-005 | unknown-pr5 | Existing PR #5 transform diff | reconciliation hold | Review diff and resolve overlap before write/integration |
 
-REL-005 reservation is released as of 2026-09-21T15:50:00Z after PR #12 merge and HANDOFF synchronization. TEST-008 narrowed its review reservation to the five changed files. UX-007 now owns only the app shell and shared stylesheet; transport paths remain reserved by TEST-008.
+REL-005 reservation is released as of 2026-09-21T15:50:00Z after PR #12 merge and HANDOFF synchronization. TEST-008 retains its five review paths. UX-007 changed only `src/styles.css`; `src/App.tsx` is released and available for other tasks.
 
 CORE-008 and OPS-001 reservations remain released.
 
@@ -85,16 +85,13 @@ CORE-008 and OPS-001 reservations remain released.
 - state: done
 - PR: #12
 - final pre-merge head: `e6bc586e84c1b03fcdbac1f1e6d7630ee48cdb24`
-- final sync before merge: ahead 8 / behind 0 versus `main`; PR diff contained only 6 REL-005 implementation/test files
 - final exact-head CI: run `35621474276` succeeded
 - merge commit: `319d83c518fe1bf166b0e5339bea331d9bd0eb90`
 - merged browser gateway: 8s handshake deadline, 15s heartbeat, 10s pong watchdog, reconnect backoff 1s→15s, manual disconnect retry suppression
 - merged Worker: retained companion `edaConnected/localBridgePort` and immediate status restoration to newly/reconnected iPad clients
 - merged PC companion: 5s cloud handshake deadline, heartbeat/pong watchdog, max 64 pending relay requests, 35s TTL, duplicate guard, local/cloud generation guards, disconnect/shutdown cleanup
-- focused reliability tests merged; broader protocol behavior suite remains TEST-008
 - live tested: no; CI is not live iPad/EasyEDA validation
 - reservation released: yes
-- remaining: TEST-008, UX-007, LIVE-001
 
 ## Checkpoint — TEST-008
 
@@ -113,12 +110,16 @@ CORE-008 and OPS-001 reservations remain released.
 ## Checkpoint — UX-007
 
 - task/chat: UX-007 / `chat-20260921T160500Z-agent3-ux007`
-- state: in_progress
-- branch: `work/UX-007/chat-20260921T160500Z-agent3-ux007`
-- scope: honest preview/control-surface labeling and removal/hiding of unsupported editing affordances; no transport/API behavior changes
-- reserved paths: `src/App.tsx`, `src/styles.css`
-- live tested: no
-- next: create branch from this claim commit, inspect current UI, implement minimal honest UX, run CI, open PR and move to review if green
+- state: review
+- branch/head/PR: `work/UX-007/chat-20260921T160500Z-agent3-ux007` / `565c19372ea60770a6d6ab620845e7a34213c2ec` / #14
+- changed files: `src/styles.css` only; `src/App.tsx` was not modified and its reservation is released
+- hides legacy mock tool rail including Select/Wire/Route/Via/Text visual affordances
+- expands preview canvas, adds visible Preview / control surface labels, and states that drawing/routing/vias/text/move/rotate remain in EasyEDA Pro on the PC
+- demo-board traces are visually dimmed/dashed to avoid implying live editable geometry
+- exact-head CI: run `35623710644` succeeded; tests/build/Worker typecheck/Wrangler dry-run/companion syntax checks passed
+- live tested: no; CI is not live iPad/EasyEDA validation
+- reservation retained on `src/styles.css` only through review
+- next: explicit user merge authorization; refresh main/board and reconcile coordination-only drift before merge, rerunning exact-head CI if head changes
 
 ## Checkpoint — BUILD-008
 
@@ -173,3 +174,6 @@ CORE-008 and OPS-001 reservations remain released.
 - 2026-09-21T16:01:00Z — Exact-head CI `35622810269` succeeded on `a5052249ba636568615ff3b082218bcb5402e15c`; 80 tests passed and all build/typecheck/dry-run/syntax steps were green.
 - 2026-09-21T16:02:00Z — TEST-008 moved to review; reservation narrowed to the five changed files pending explicit merge authorization.
 - 2026-09-21T16:05:00Z — Agent 3 claimed UX-007 and reserved `src/App.tsx` + `src/styles.css`; TEST-008 transport review remains isolated.
+- 2026-09-21T16:08:00Z — PR #14 opened as draft; implementation touched only `src/styles.css`.
+- 2026-09-21T16:10:00Z — Exact-head CI `35623710644` succeeded on `565c19372ea60770a6d6ab620845e7a34213c2ec`.
+- 2026-09-21T16:11:00Z — UX-007 moved to review; `src/App.tsx` released, `src/styles.css` retained through review.

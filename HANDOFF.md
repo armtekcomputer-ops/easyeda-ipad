@@ -47,9 +47,9 @@ EasyEDA Pro on VPS
 
 ## Phase 5 goal
 
-Add a narrowly-scoped transform capability for **selected device components only** in active PCB and schematic-page documents.
+Add a narrowly-scoped transform capability for **one selected device component at a time** in active PCB and schematic-page documents.
 
-Do **not** implement transform for arbitrary primitive types, footprint-editor primitives, routing, wire creation, arbitrary property editing, save, undo, redo, delete, copy/paste, or document creation in this phase.
+Do **not** implement transform for arbitrary primitive types, footprint-editor primitives, multi-component transforms, routing, wire creation, arbitrary property editing, save, undo, redo, delete, copy/paste, or document creation in this phase.
 
 ## Official API research findings
 
@@ -119,7 +119,7 @@ Official EasyEDA documentation states:
 - rotation angles are in **degrees**
 - positive rotation is **counter-clockwise**
 
-For a consistent physical nudge in the iPad UI, Phase 5 will use a fixed **0.254 mm** movement step:
+For a consistent physical nudge in the iPad UI, Phase 5 uses a fixed **0.254 mm** movement step:
 
 - PCB: 10 native units = 10 mil = 0.254 mm
 - schematic: 1 native unit = 0.01 inch = 0.254 mm
@@ -141,12 +141,12 @@ This avoids guessing canvas-axis semantics. Rotation is safe to label `−90°` 
 
 ### Absolute vs relative semantics
 
-`modify(...)` accepts component property values (`x`, `y`, `rotation`) rather than delta arguments. Phase 5 implements relative transforms by:
+`modify(...)` accepts component property values (`x`, `y`, `rotation`) rather than delta arguments. Phase 5 implements a relative transform by:
 
-1. retrieving each selected component with `get(id)`,
+1. retrieving the one selected component with `get(id)`,
 2. reading current `getState_X/Y/Rotation()`,
-3. calculating bounded new absolute values,
-4. calling `modify(id, { x, y, rotation })` with only the fields required for that operation.
+3. calculating one bounded new absolute value,
+4. calling `modify(id, { x })`, `modify(id, { y })`, or `modify(id, { rotation })` with only the field required for that operation.
 
 No raw component object fields are mutated.
 
@@ -161,50 +161,51 @@ Supported document types:
 
 `FOOTPRINT = 4` is intentionally excluded from this phase. Although the PCB API family is also used by the footprint editor, Phase 5 specifically transforms **device component instances**, and a footprint-editor selection is not assumed to represent a device component.
 
-### Preflight / partial-write rule
+### Single-component atomicity decision
 
-Before any component is modified, every requested validated selection ID must resolve through the appropriate `PrimitiveComponent.get(id)` API. If any selected ID is not a device component, the entire transform fails before any mutation occurs.
+The verified `PrimitiveComponent.modify(...)` APIs mutate one component at a time, and no documented atomic batch/transaction transform API was found. A multi-component loop could therefore partially mutate earlier components if a later `modify(...)` failed.
 
-For PCB, all resolved components must also be unlocked before any mutation starts.
+To avoid partial writes, Phase 5 requires **exactly one validated selected primitive ID**. The command rejects zero IDs and multi-selection before calling any component API. It then verifies that the selected ID resolves to a device component before the single write.
 
-This prevents a mixed selection (for example component + track) from being partially transformed.
+For PCB, the resolved component must also be unlocked before mutation.
 
 ## Phase 5 implementation decision
 
-Phase 5 supports selected PCB and schematic device component(s):
+Phase 5 supports one selected PCB or schematic device component:
 
 - nudge X by one fixed ±0.254 mm step
 - nudge Y by one fixed ±0.254 mm step
 - rotate by ±90°
 
-It does not support arbitrary numeric text input yet. The UI operates only on IDs from the latest validated snapshot.
+It does not support arbitrary numeric text input or multi-selection. The UI operates only on the one ID from the latest validated snapshot.
 
 ## Phase 5 safety rules
 
 - Use only the exact documented component APIs above.
 - Never infer a generic transform API or dispatch arbitrary primitive types.
-- Operate only on primitive IDs already present in validated EasyEDA snapshot state.
-- Maximum transform request: 100 IDs.
-- Reuse the existing primitive-ID validation: trimmed, non-empty, max 256 characters, de-duplicated.
-- Preflight all IDs as components before the first write.
-- Reject PCB locked components before the first write.
+- Operate only when the latest validated snapshot contains exactly one selected ID.
+- Reuse existing primitive-ID validation: trimmed, non-empty, max 256 characters.
+- Reject zero or multiple IDs before generating a write command.
+- Verify the ID resolves through the documented component `get(id)` API before mutation.
+- Reject PCB locked components before the write.
 - Movement is fixed to one 0.254 mm UI step per request; no arbitrary coordinate input in this phase.
 - Rotation delta is fixed to ±90° per request.
 - Check active document type inside the same execute request before lookup/mutation.
-- Generated code embeds only validated serialized IDs and fixed finite numeric deltas.
+- Generated code embeds only the validated serialized ID and a fixed finite delta.
+- Read current state through documented `getState_X/Y/Rotation()` accessors.
 - Return and browser-validate a compact mutation result.
 - Treat `modify(...)` returning `undefined` as mutation failure.
 - After successful mutation, call `getSnapshot()` and use that fresh validated read-back as the source of truth.
-- If any preflight check fails, perform zero component mutations.
+- If document/component/lock/state preflight fails, perform zero mutation calls.
 
 ## Planned Phase 5 deliverables
 
 - [x] Record exact verified transform API signatures/semantics in this HANDOFF.
-- [x] Decide scope: PCB + schematic **device components only**.
+- [x] Decide scope: PCB + schematic **one device component at a time**.
 - [ ] Add typed component-transform command builders and response validation.
-- [ ] Add component preflight, locked-PCB rejection, input bounds, and document-type dispatch.
-- [ ] Add tests proving only verified `pcb_PrimitiveComponent` / `sch_PrimitiveComponent` APIs are called and mixed/non-component selection causes zero writes.
-- [ ] Add iPad X−/X+/Y−/Y+/rotate controls that operate only on validated snapshot selection IDs.
+- [ ] Add component preflight, locked-PCB rejection, finite-state checks, and document-type dispatch.
+- [ ] Add tests proving only verified `pcb_PrimitiveComponent` / `sch_PrimitiveComponent` APIs are called and zero/multi/non-component/locked selection causes zero writes.
+- [ ] Add iPad X−/X+/Y−/Y+/rotate controls enabled only for exactly one validated snapshot selection ID.
 - [ ] Read back state after every successful transform.
 - [ ] Open a separate PR, run CI, update README/version/HANDOFF, and merge only when latest head is green.
 
@@ -218,4 +219,4 @@ At each meaningful milestone:
 
 ## Next action
 
-Implement a typed component-transform layer in `src/lib/easyeda-api.ts` for fixed coordinate operations X−/X+/Y−/Y+ by one physical 0.254 mm step and rotation ±90°. The execute command must preflight every validated snapshot ID as a device component (and reject locked PCB components) before the first `modify(...)` call, return a compact versioned result, and trigger `getSnapshot()` only after complete success. Add focused Vitest coverage before changing the UI.
+Implement a typed single-component transform module for fixed coordinate operations X−/X+/Y−/Y+ by one physical 0.254 mm step and rotation ±90°. The execute command must verify the active document, resolve the one validated ID through the correct component `get(id)` API, reject locked PCB components, read finite current X/Y/rotation state, perform exactly one documented `modify(...)` call, validate its result, and trigger `getSnapshot()` only after success. Add focused Vitest coverage before changing the UI.

@@ -124,11 +124,24 @@ For a consistent physical nudge in the iPad UI, Phase 5 will use a fixed **0.254
 - PCB: 10 native units = 10 mil = 0.254 mm
 - schematic: 1 native unit = 0.01 inch = 0.254 mm
 
-Rotation controls will use fixed `+90°` / `-90°` deltas.
+Rotation controls use fixed `+90°` / `-90°` deltas.
+
+### Coordinate-axis labeling decision
+
+The official references searched for Phase 5 confirm units but did not provide a sufficiently explicit statement about the visual positive/negative Y direction for both editor domains. Phase 5 therefore does **not** label Y mutations as “up/down” or attach directional arrow semantics.
+
+The UI exposes deterministic coordinate operations only:
+
+- `X − 0.254 mm`
+- `X + 0.254 mm`
+- `Y − 0.254 mm`
+- `Y + 0.254 mm`
+
+This avoids guessing canvas-axis semantics. Rotation is safe to label `−90°` / `+90°` because the official docs explicitly state positive rotation is counter-clockwise.
 
 ### Absolute vs relative semantics
 
-`modify(...)` accepts component property values (`x`, `y`, `rotation`) rather than delta arguments. Phase 5 therefore implements relative transforms by:
+`modify(...)` accepts component property values (`x`, `y`, `rotation`) rather than delta arguments. Phase 5 implements relative transforms by:
 
 1. retrieving each selected component with `get(id)`,
 2. reading current `getState_X/Y/Rotation()`,
@@ -158,14 +171,13 @@ This prevents a mixed selection (for example component + track) from being parti
 
 ## Phase 5 implementation decision
 
-Phase 5 supports:
+Phase 5 supports selected PCB and schematic device component(s):
 
-- move selected PCB device component(s) by a fixed 0.254 mm nudge
-- move selected schematic device component(s) by a fixed 0.254 mm nudge
-- rotate selected PCB device component(s) by ±90°
-- rotate selected schematic device component(s) by ±90°
+- nudge X by one fixed ±0.254 mm step
+- nudge Y by one fixed ±0.254 mm step
+- rotate by ±90°
 
-It does not support arbitrary numeric text input yet. The UI will operate only on IDs from the latest validated snapshot.
+It does not support arbitrary numeric text input yet. The UI operates only on IDs from the latest validated snapshot.
 
 ## Phase 5 safety rules
 
@@ -192,7 +204,7 @@ It does not support arbitrary numeric text input yet. The UI will operate only o
 - [ ] Add typed component-transform command builders and response validation.
 - [ ] Add component preflight, locked-PCB rejection, input bounds, and document-type dispatch.
 - [ ] Add tests proving only verified `pcb_PrimitiveComponent` / `sch_PrimitiveComponent` APIs are called and mixed/non-component selection causes zero writes.
-- [ ] Add iPad nudge/rotate controls that operate only on validated snapshot selection IDs.
+- [ ] Add iPad X−/X+/Y−/Y+/rotate controls that operate only on validated snapshot selection IDs.
 - [ ] Read back state after every successful transform.
 - [ ] Open a separate PR, run CI, update README/version/HANDOFF, and merge only when latest head is green.
 
@@ -206,4 +218,4 @@ At each meaningful milestone:
 
 ## Next action
 
-Implement a typed component-transform layer in `src/lib/easyeda-api.ts` for four fixed operations: nudge left/right/up/down by one physical 0.254 mm step and rotate ±90°. The execute command must preflight every validated snapshot ID as a device component (and reject locked PCB components) before the first `modify(...)` call, return a compact versioned result, and trigger `getSnapshot()` only after complete success. Add focused Vitest coverage before changing the UI.
+Implement a typed component-transform layer in `src/lib/easyeda-api.ts` for fixed coordinate operations X−/X+/Y−/Y+ by one physical 0.254 mm step and rotation ±90°. The execute command must preflight every validated snapshot ID as a device component (and reject locked PCB components) before the first `modify(...)` call, return a compact versioned result, and trigger `getSnapshot()` only after complete success. Add focused Vitest coverage before changing the UI.

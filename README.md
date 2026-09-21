@@ -46,9 +46,11 @@ The VPS initiates the Internet connection to Cloudflare. You do **not** need to 
 - VPS outbound WebSocket cloud agent
 - Automatic scan of the official local bridge ports `49620-49629`
 - Direct/LAN companion mode retained as a fallback
-- Typed, read-only EasyEDA Pro document snapshot integration
+- Typed EasyEDA Pro document snapshot integration
 - Validated current document/project/PCB/schematic/selection state
 - Bounded selection payloads before data is rendered on iPad
+- Narrowly-scoped EasyEDA selection synchronization for PCB, footprint, and schematic documents
+- Selection writes restricted to validated primitive IDs already read from EasyEDA
 - GitHub Actions tests, build, Worker typecheck, and Wrangler validation
 
 ## Phase 3: read-only EasyEDA state
@@ -62,7 +64,7 @@ After connecting the PWA, tap **Refresh from EasyEDA**. The PWA sends a narrowly
 - selected primitive IDs
 - a bounded shallow scalar summary of selected primitive objects
 
-The first integration is intentionally read-only. It does **not** call save, clear selection, select primitives, move/rotate, wire/route, undo, or redo APIs.
+The Phase 3 snapshot path is read-only. It does not call save, move/rotate, wire/route, undo, or redo APIs.
 
 The typed command layer lives in:
 
@@ -70,7 +72,7 @@ The typed command layer lives in:
 src/lib/easyeda-api.ts
 ```
 
-Safety limits currently applied to every snapshot:
+Safety limits applied to every snapshot:
 
 - selected IDs: maximum 100 returned to the browser
 - primitive summaries: maximum 20
@@ -84,7 +86,7 @@ The command-generation and validation behavior is covered by Vitest:
 npm test
 ```
 
-### Official APIs used by the current snapshot
+### Official APIs used by the snapshot
 
 Current document/project:
 
@@ -111,6 +113,57 @@ eda.sch_SelectControl.getAllSelectedPrimitives()
 ```
 
 These names were verified against the official `easyeda/easyeda-api-skill` reference. The project does not guess undocumented method names. In particular, no public undo/redo API was found in the current official reference, so undo/redo is not implemented.
+
+## Phase 4: validated selection synchronization
+
+Phase 4 adds the first write capability, intentionally limited to active selection state.
+
+The Selection Sync panel can:
+
+- clear the active EasyEDA selection
+- re-apply primitive IDs already present in the latest validated snapshot
+- read EasyEDA state back immediately after every successful mutation
+
+The UI does **not** accept arbitrary typed primitive IDs. Selection writes are generated only from validated IDs already returned by EasyEDA.
+
+### Official mutation APIs used
+
+PCB / footprint:
+
+```text
+eda.pcb_SelectControl.clearSelected()
+eda.pcb_SelectControl.doSelectPrimitives(primitiveIds)
+```
+
+Schematic / symbol:
+
+```text
+eda.sch_SelectControl.clearSelected()
+eda.sch_SelectControl.doSelectPrimitives(primitiveIds)
+```
+
+The active editor type is checked inside the same execute request using:
+
+```text
+eda.dmt_SelectControl.getCurrentDocumentInfo()
+```
+
+Supported mutation document types are schematic page (`1`), PCB (`3`), and footprint (`4`). Other document types fail without calling a selection mutation API.
+
+### Selection write safety rules
+
+- maximum 100 primitive IDs per request
+- IDs are trimmed and must be non-empty strings
+- maximum primitive ID length is 256 characters
+- duplicate IDs are removed before execution
+- validated arrays are embedded using `JSON.stringify`, not raw quoted-string concatenation
+- mutation responses are schema-validated in the browser
+- a successful mutation is never assumed locally; the PWA immediately calls `getSnapshot()` and uses that fresh validated result
+- failed or unsupported mutations do not trigger an assumed local state update
+
+The official PCB/SCH event listener references state that these listeners are extension-only and standalone script calls throw. Because this project executes standalone code through the Run API Gateway, Phase 4 uses explicit read-back rather than registering selection-change event listeners or inventing a polling API.
+
+Phase 4 still does **not** implement move/rotate, property editing, routing, wire creation, save, undo, or redo.
 
 ## Requirements
 
@@ -270,6 +323,7 @@ Prefer a systemd credentials mechanism or protected environment file instead of 
 5. Enter `IPAD_TOKEN`.
 6. Tap **Connect**.
 7. Tap **Refresh from EasyEDA** to read the current EasyEDA document state.
+8. For supported PCB/footprint/schematic documents, use **Selection Sync** to re-apply validated snapshot IDs or clear the active EasyEDA selection.
 
 The token is not compiled into the PWA. The current UI keeps the iPad token in browser `sessionStorage`, so it is cleared when that browser session is discarded.
 
@@ -279,6 +333,7 @@ The inspector reports three independent connection states plus the latest valida
 - Cloudflare -> VPS agent connection
 - VPS agent -> local EasyEDA bridge connection
 - current document/project/context/selection snapshot
+- selection synchronization availability for the current document type
 
 ## Session model
 
@@ -353,10 +408,11 @@ EasyEDA API execution is powerful. Treat the relay as a privileged control path.
 - Execute payloads are limited to 128 KiB.
 - The relay does not intentionally log tokens or execute payload contents.
 - EasyEDA values returned to the PWA are treated as untrusted and validated before rendering.
+- Selection write inputs are bounded and generated only from validated snapshot IDs.
 
 ## Current scope
 
-The transport, Cloudflare/VPS deployment path, iPad interaction shell, and first real EasyEDA read-only state integration are implemented. The visual PCB/schematic canvas is still a touch-oriented preview rather than a full remote clone of the EasyEDA editor. Editing commands will be added incrementally only after their public EasyEDA APIs are verified.
+The transport, Cloudflare/VPS deployment path, iPad interaction shell, validated EasyEDA state snapshot, and first bounded selection-write workflow are implemented. The visual PCB/schematic canvas is still a touch-oriented preview rather than a full remote clone of the EasyEDA editor. Additional editing commands will be added incrementally only after their public EasyEDA APIs are verified and covered by tests.
 
 ## Handoff workflow
 

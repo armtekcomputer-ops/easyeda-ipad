@@ -7,8 +7,10 @@ export type GatewayStatus = {
   localBridgePort?: number | null;
 };
 
+type GatewayMessageType = 'handshake' | 'execute' | 'result' | 'error' | 'ping' | 'pong' | 'companion-status' | 'relay-status';
+
 type GatewayMessage = {
-  type: 'handshake' | 'execute' | 'result' | 'error' | 'ping' | 'pong' | 'companion-status' | 'relay-status';
+  type: GatewayMessageType;
   id?: string;
   service?: string;
   clientType?: string;
@@ -26,6 +28,63 @@ type PendingRequest = {
   reject: (reason?: unknown) => void;
   timer: number;
 };
+
+const GATEWAY_MESSAGE_TYPES = new Set<GatewayMessageType>([
+  'handshake',
+  'execute',
+  'result',
+  'error',
+  'ping',
+  'pong',
+  'companion-status',
+  'relay-status',
+]);
+const MAX_GATEWAY_FRAME_BYTES = 160 * 1024;
+const MAX_ID_LENGTH = 1024;
+const MAX_STATUS_TEXT_LENGTH = 2048;
+const textEncoder = new TextEncoder();
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function optionalBoundedString(record: Record<string, unknown>, key: string, maxLength: number): boolean {
+  const value = record[key];
+  return value === undefined || (typeof value === 'string' && value.length <= maxLength);
+}
+
+function parseGatewayMessage(raw: unknown): GatewayMessage | null {
+  if (typeof raw !== 'string' || textEncoder.encode(raw).byteLength > MAX_GATEWAY_FRAME_BYTES) return null;
+
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+
+  if (!isRecord(value) || typeof value.type !== 'string' || !GATEWAY_MESSAGE_TYPES.has(value.type as GatewayMessageType)) {
+    return null;
+  }
+  if (!optionalBoundedString(value, 'id', MAX_ID_LENGTH)) return null;
+  if (!optionalBoundedString(value, 'service', 128)) return null;
+  if (!optionalBoundedString(value, 'clientType', 128)) return null;
+  if (!optionalBoundedString(value, 'error', MAX_STATUS_TEXT_LENGTH)) return null;
+  if (!optionalBoundedString(value, 'via', 128)) return null;
+  if (value.vpsConnected !== undefined && typeof value.vpsConnected !== 'boolean') return null;
+  if (value.edaConnected !== undefined && typeof value.edaConnected !== 'boolean') return null;
+  if (
+    value.localBridgePort !== undefined
+    && value.localBridgePort !== null
+    && (typeof value.localBridgePort !== 'number'
+      || !Number.isInteger(value.localBridgePort)
+      || value.localBridgePort < 1
+      || value.localBridgePort > 65_535)
+  ) return null;
+  if (value.timestamp !== undefined && (typeof value.timestamp !== 'number' || !Number.isFinite(value.timestamp))) return null;
+
+  return value as GatewayMessage;
+}
 
 export class EasyEdaGatewayClient extends EventTarget {
   private socket: WebSocket | null = null;
@@ -100,13 +159,9 @@ export class EasyEdaGatewayClient extends EventTarget {
     });
   }
 
-  private handleMessage(socket: WebSocket, event: MessageEvent<string>): void {
-    let message: GatewayMessage;
-    try {
-      message = JSON.parse(event.data) as GatewayMessage;
-    } catch {
-      return;
-    }
+  private handleMessage(socket: WebSocket, event: MessageEvent): void {
+    const message = parseGatewayMessage(event.data);
+    if (!message) return;
 
     if (message.type === 'handshake') {
       if (message.service !== 'easyeda-bridge') {

@@ -39,15 +39,6 @@ EasyEDA bridge 127.0.0.1:49620-49629
 EasyEDA Pro on VPS
 ```
 
-## Existing implementation on main
-
-- React + TypeScript + Vite iPad-first PWA shell.
-- Touch/Pencil gesture foundation.
-- EasyEDA-compatible browser WebSocket gateway client.
-- `companion/server.mjs` for direct LAN mode.
-- GitHub Actions CI already builds the web app and syntax-checks companion.
-- Phase 1 was merged via PR #1.
-
 ## Important protocol facts
 
 - Official EasyEDA bridge scans/listens on ports `49620-49629` on loopback.
@@ -60,7 +51,7 @@ EasyEDA Pro on VPS
 - Host Vite `dist/` using Workers Static Assets.
 - Route `/api/*`, `/ws/*` through Worker first.
 - Use one Durable Object per logical `session`.
-- Use Durable Object WebSocket Hibernation API (`ctx.acceptWebSocket`) so idle sockets can hibernate.
+- Use Durable Object WebSocket Hibernation API (`ctx.acceptWebSocket`).
 - Use separate secrets for iPad and VPS roles (`IPAD_TOKEN`, `VPS_TOKEN`).
 - VPS initiates outbound WSS to Cloudflare; Cloudflare never needs inbound access to the VPS local bridge.
 - Default session ID: `default`.
@@ -78,15 +69,30 @@ EasyEDA Pro on VPS
 - [x] Update README with VPS + Cloudflare deployment, Worker secrets, cloud agent, iPad connection flow, systemd example, and security guidance.
 - [x] Extend CI to build PWA, generate/typecheck Worker types, run Wrangler deploy dry-run, and syntax-check both companion modes.
 - [x] Open PR #2.
-- [ ] Get CI green, fix every failure, then merge.
+- [x] Get CI green.
+- [ ] Merge PR #2.
 
 ## CI loop history
 
 ### Run 1 on PR #2
 
 - Failed in `actions/setup-node` before dependencies/build.
-- Cause: `cache: npm` requires a lockfile but this repository currently has no `package-lock.json`.
-- Fix committed: remove npm caching from `setup-node` so CI can reach the actual build/type/Wrangler checks.
+- Cause: `cache: npm` required a lockfile, but the repository has no `package-lock.json`.
+- Fix: removed npm caching from `setup-node`.
+
+### Run 2 on PR #2
+
+GitHub Actions run `35591914668` completed successfully.
+
+Passed checks:
+
+- dependency installation
+- PWA TypeScript/Vite build
+- Worker runtime type generation
+- Worker TypeScript typecheck
+- Wrangler deploy dry-run / config bundle validation
+- direct companion syntax check
+- VPS cloud agent syntax check
 
 ## Files added or changed in current branch
 
@@ -112,10 +118,6 @@ EasyEDA Pro on VPS
 - Worker should not log tokens or execute payload contents.
 - Prefer `wss://` in production.
 
-## Known implementation note
-
-A temporary stylesheet overwrite regression occurred during development and was corrected in the same branch by restoring the complete stylesheet from `main` and reapplying only the Cloud mode control additions.
-
 ## Loop rule
 
 At each meaningful milestone:
@@ -126,4 +128,4 @@ At each meaningful milestone:
 
 ## Next action
 
-Wait for the new PR #2 CI run triggered by commit `408d1b68a9c51a60e43880897c03b099ed7a99de`. Inspect the first failing step if any, fix it on this branch, update/re-read this HANDOFF, and repeat until CI is green.
+Re-read this HANDOFF, verify PR #2 is mergeable, merge it into `main`, then start the next loop from `main` with Phase 3 focused on mapping the iPad workspace to supported EasyEDA Pro APIs.

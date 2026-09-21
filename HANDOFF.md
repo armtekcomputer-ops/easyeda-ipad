@@ -105,15 +105,25 @@ Decision: after every successful selection mutation, explicitly call `getSnapsho
 - [x] Successful mutation immediately calls `getSnapshot()` and returns the fresh validated snapshot.
 - [x] Failed/unsupported mutation does not perform a read-back or update assumed local state.
 - [x] Add tests covering exact verified API calls, JSON serialization, input limits, trimming/deduplication, malformed results, read-back after success, and unsupported-document failure.
-- [ ] Add iPad UI controls for selection sync using only IDs from validated snapshot state.
+- [x] Add iPad Selection Sync controls using only validated snapshot IDs.
+- [x] UI does not accept arbitrary typed primitive IDs.
+- [x] Selection controls are disabled while disconnected, refreshing, mutating, unsupported, or when the requested action has no IDs/selection.
+- [x] Successful UI mutation replaces local snapshot state only with the fresh validated read-back returned by `EasyEdaApi`.
+- [x] Mutation failures use the existing sanitized snapshot/API error display.
+- [x] Add inspector styling for disabled actions, selection action grouping, bounded/truncated values, and API errors.
 - [x] Prefer explicit refresh because documented event listeners are extension-only.
-- [ ] Open a separate PR, run CI, update README/HANDOFF, and merge only when current head is green.
+- [ ] Open PR #4 and run CI.
+- [ ] Fix any CI failure on this branch.
+- [ ] Update README/package version and final HANDOFF after green CI.
+- [ ] Merge PR #4 only when the latest head is green.
 
 ## Files changed so far in Phase 4
 
 - `HANDOFF.md`
 - `src/lib/easyeda-api.ts`
 - `src/lib/easyeda-selection.test.ts`
+- `src/App.tsx`
+- `src/styles.css`
 
 ## Safety / correctness rules
 
@@ -137,4 +147,4 @@ At each meaningful milestone:
 
 ## Next action
 
-Re-read this HANDOFF, then update the iPad inspector with a narrowly-scoped Selection Sync section. It may clear the active EasyEDA selection and re-apply IDs already present in the latest validated snapshot; do not accept arbitrary typed IDs in the UI yet. Disable controls while disconnected, while a mutation is running, or when there is no supported active document. On success replace UI snapshot state with the fresh snapshot returned by the mutation method; on failure show the existing sanitized API error state.
+Re-read this HANDOFF, compare the branch to `main`, open PR #4 for Phase 4 Selection Sync, and let GitHub Actions validate tests, TypeScript/Vite, Worker types, Wrangler dry-run, and companion syntax. Fix failures on the same branch before documentation/version finalization.

@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useCanvasViewport } from './hooks/useCanvasViewport';
 import { EasyEdaApi, EASYEDA_DOCUMENT_TYPE, type EasyEdaSnapshot } from './lib/easyeda-api';
+import {
+  EASYEDA_COMPONENT_NUDGE_MM,
+  EasyEdaComponentTransformApi,
+  type EasyEdaComponentTransformOperation,
+} from './lib/easyeda-transform';
 import { EasyEdaGatewayClient, type GatewayState, type GatewayStatus } from './lib/gateway';
 
 const tools = [
@@ -41,6 +46,11 @@ function selectionDocumentSupported(documentType: number | undefined) {
     || documentType === EASYEDA_DOCUMENT_TYPE.FOOTPRINT;
 }
 
+function componentTransformDocumentSupported(documentType: number | undefined) {
+  return documentType === EASYEDA_DOCUMENT_TYPE.SCHEMATIC_PAGE
+    || documentType === EASYEDA_DOCUMENT_TYPE.PCB;
+}
+
 function contextName(snapshot: EasyEdaSnapshot | null) {
   if (!snapshot) return null;
   if (snapshot.context.kind === 'pcb') return snapshot.context.name ?? 'PCB';
@@ -64,6 +74,7 @@ function cloudSocketUrl(session: string, token: string) {
 export default function App() {
   const gateway = useMemo(() => new EasyEdaGatewayClient(), []);
   const easyeda = useMemo(() => new EasyEdaApi(gateway), [gateway]);
+  const transformApi = useMemo(() => new EasyEdaComponentTransformApi(gateway), [gateway]);
   const [gatewayState, setGatewayState] = useState<GatewayState>('disconnected');
   const [gatewayStatus, setGatewayStatus] = useState<GatewayStatus>({});
   const [connectionMode, setConnectionMode] = useState<ConnectionMode>(() => (
@@ -77,6 +88,7 @@ export default function App() {
   const [snapshotState, setSnapshotState] = useState<SnapshotState>('idle');
   const [snapshotError, setSnapshotError] = useState<string | null>(null);
   const [selectionBusy, setSelectionBusy] = useState(false);
+  const [transformBusy, setTransformBusy] = useState(false);
   const { zoom, offset, inputMode, resetView, handlers } = useCanvasViewport();
 
   useEffect(() => {
@@ -87,6 +99,8 @@ export default function App() {
         setSnapshot(null);
         setSnapshotState('idle');
         setSnapshotError(null);
+        setSelectionBusy(false);
+        setTransformBusy(false);
       }
     };
     const onStatusChange = (event: Event) => {
@@ -143,7 +157,12 @@ export default function App() {
   };
 
   const refreshSnapshot = async () => {
-    if (gatewayState !== 'connected' || snapshotState === 'loading' || selectionBusy) return;
+    if (
+      gatewayState !== 'connected'
+      || snapshotState === 'loading'
+      || selectionBusy
+      || transformBusy
+    ) return;
     setSnapshotState('loading');
     setSnapshotError(null);
     try {
@@ -157,7 +176,12 @@ export default function App() {
   };
 
   const runSelectionMutation = async (mutation: () => Promise<EasyEdaSnapshot>) => {
-    if (gatewayState !== 'connected' || selectionBusy || snapshotState === 'loading') return;
+    if (
+      gatewayState !== 'connected'
+      || selectionBusy
+      || transformBusy
+      || snapshotState === 'loading'
+    ) return;
     setSelectionBusy(true);
     setSnapshotError(null);
     try {
@@ -182,13 +206,44 @@ export default function App() {
     void runSelectionMutation(() => easyeda.selectPrimitiveIds(ids));
   };
 
+  const runComponentTransform = async (operation: EasyEdaComponentTransformOperation) => {
+    const ids = snapshot?.selection.ids ?? [];
+    if (
+      gatewayState !== 'connected'
+      || selectionBusy
+      || transformBusy
+      || snapshotState === 'loading'
+      || ids.length !== 1
+    ) return;
+    setTransformBusy(true);
+    setSnapshotError(null);
+    try {
+      const next = await transformApi.transform(ids, operation);
+      setSnapshot(next);
+      setSnapshotState('ready');
+    } catch (error) {
+      setSnapshotState('error');
+      setSnapshotError(error instanceof Error ? error.message : 'Unable to transform the selected EasyEDA component');
+    } finally {
+      setTransformBusy(false);
+    }
+  };
+
   const projectTitle = snapshot?.project?.friendlyName ?? contextName(snapshot) ?? 'EasyEDA workspace';
   const firstSelectedId = snapshot?.selection.ids[0];
   const selectionSupported = selectionDocumentSupported(snapshot?.document?.documentType);
+  const transformSupported = componentTransformDocumentSupported(snapshot?.document?.documentType);
   const selectionControlsDisabled = gatewayState !== 'connected'
     || selectionBusy
+    || transformBusy
     || snapshotState === 'loading'
     || !selectionSupported;
+  const transformControlsDisabled = gatewayState !== 'connected'
+    || selectionBusy
+    || transformBusy
+    || snapshotState === 'loading'
+    || !transformSupported
+    || (snapshot?.selection.ids.length ?? 0) !== 1;
 
   return (
     <main className="app-shell">
@@ -211,7 +266,7 @@ export default function App() {
             className="primary-button"
             type="button"
             onClick={() => void refreshSnapshot()}
-            disabled={gatewayState !== 'connected' || snapshotState === 'loading' || selectionBusy}
+            disabled={gatewayState !== 'connected' || snapshotState === 'loading' || selectionBusy || transformBusy}
           >
             {snapshotState === 'loading' ? 'Refreshing…' : 'Refresh from EasyEDA'}
           </button>
@@ -248,7 +303,7 @@ export default function App() {
               style={{ transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})` }}
             >
               <div className="demo-board">
-                <div className="board-title">EASYEDA SELECTION SYNC</div>
+                <div className="board-title">EASYEDA COMPONENT TRANSFORM</div>
                 <div className="component component-a">
                   <span>LIVE STATE</span>
                   <strong>{documentTypeLabel(snapshot?.document?.documentType)}</strong>
@@ -369,7 +424,7 @@ export default function App() {
               className="secondary-button wide"
               type="button"
               onClick={() => void refreshSnapshot()}
-              disabled={gatewayState !== 'connected' || snapshotState === 'loading' || selectionBusy}
+              disabled={gatewayState !== 'connected' || snapshotState === 'loading' || selectionBusy || transformBusy}
             >
               {snapshotState === 'loading' ? 'Reading EasyEDA…' : 'Refresh from EasyEDA'}
             </button>
@@ -401,6 +456,56 @@ export default function App() {
           </div>
 
           <div className="panel-section">
+            <span className="eyebrow">COMPONENT TRANSFORM</span>
+            <div className="setting-row"><span>API domain</span><strong>{transformSupported ? 'PCB / Schematic' : 'Unavailable'}</strong></div>
+            <div className="setting-row"><span>Requirement</span><strong>{(snapshot?.selection.ids.length ?? 0) === 1 ? '1 selected' : 'Select exactly 1'}</strong></div>
+            <div className="setting-row"><span>Nudge step</span><strong>{EASYEDA_COMPONENT_NUDGE_MM} mm</strong></div>
+            <div className="transform-grid">
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => void runComponentTransform('x-negative')}
+                disabled={transformControlsDisabled}
+              >X − {EASYEDA_COMPONENT_NUDGE_MM} mm</button>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => void runComponentTransform('x-positive')}
+                disabled={transformControlsDisabled}
+              >X + {EASYEDA_COMPONENT_NUDGE_MM} mm</button>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => void runComponentTransform('y-negative')}
+                disabled={transformControlsDisabled}
+              >Y − {EASYEDA_COMPONENT_NUDGE_MM} mm</button>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => void runComponentTransform('y-positive')}
+                disabled={transformControlsDisabled}
+              >Y + {EASYEDA_COMPONENT_NUDGE_MM} mm</button>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => void runComponentTransform('rotate-negative')}
+                disabled={transformControlsDisabled}
+              >Rotation −90°</button>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => void runComponentTransform('rotate-positive')}
+                disabled={transformControlsDisabled}
+              >Rotation +90°</button>
+            </div>
+            <p className="panel-note">
+              {transformBusy
+                ? 'Transforming and reading EasyEDA state back…'
+                : 'Device components only. Coordinate signs are shown explicitly; Y is not labeled up/down because that visual axis direction is not assumed.'}
+            </p>
+          </div>
+
+          <div className="panel-section">
             <span className="eyebrow">INPUT</span>
             <div className="setting-row"><span>Apple Pencil</span><strong>{inputMode === 'pencil' ? 'Active' : 'Ready'}</strong></div>
             <div className="setting-row"><span>Pinch zoom</span><strong>On</strong></div>
@@ -429,7 +534,7 @@ export default function App() {
 
       <footer className="statusbar">
         <span>Tool: {activeTool}</span>
-        <span>EasyEDA selection sync</span>
+        <span>EasyEDA validated control</span>
         <span>{snapshot ? `${snapshot.selection.total} selected` : 'No snapshot'}</span>
         <span className={`status-dot-wrap status-${gatewayState}`}><i />{stateLabel(gatewayState)}</span>
       </footer>

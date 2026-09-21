@@ -1,7 +1,7 @@
 # Shared multi-chat work board
 
 Canonical source: `armtekcomputer-ops/easyeda-ipad`, branch `main`, path `WORKBOARD.md`.
-Updated: 2026-09-21T15:09:00Z. All timestamps use UTC ISO 8601.
+Updated: 2026-09-21T15:14:00Z. All timestamps use UTC ISO 8601.
 This file tracks ownership and unfinished work; `HANDOFF.md` tracks verified product state and decisions.
 
 ## Required workflow
@@ -31,7 +31,7 @@ Use `blocked`, `paused`, or `needs_reconciliation` when appropriate. An expired 
 | chat-20260921T141000Z-agent2-view001 | Agent 2 — real-board viewer research | VIEW-001 | claimed | 2026-09-21T14:10:00Z | `work/VIEW-001/chat-20260921T141000Z-agent2-view001`; PR #9 | Complete research-only feasibility work without application-code changes |
 | chat-20260921T141500Z-agent3-ops001 | Agent 3 — PC companion deployment/runbook | OPS-001 | done | 2026-09-21T14:31:00Z | PR #11 merged as `a33f2d9ec66e993c69d1d1288bb579f83248a15b`; HANDOFF refreshed on main | No further OPS-001 work; reservation released |
 | chat-20260921T145300Z-agent3-recon008 | Agent 3 — PR #8 reconciliation reviewer | RECON-008 | done | 2026-09-21T14:57:00Z | review-only; PR review `5268152134`; no CORE-008 code writes | Findings transferred to active CORE-008 owner |
-| chat-20260921T150300Z-agent3-core008 | Agent 3 — CORE-008 takeover | CORE-008 | in_progress | 2026-09-21T15:09:00Z | `feat/pcb-component-inspector`; head `a3063ec2693de6b207a1a6bbefac2f0ee26786cd`; PR #8 | Fresh exact-head CI run `35616679777` in progress; review result then move to review/merge-ready or fix failures |
+| chat-20260921T150300Z-agent3-core008 | Agent 3 — CORE-008 takeover | CORE-008 | review | 2026-09-21T15:14:00Z | `feat/pcb-component-inspector`; head `72089b33939b9e6fd64a8a944a9a6a072457d42d`; PR #8 | Exact-head CI `35617304968` green; merge only with explicit user authorization |
 | unknown-pr5 | Existing PR author/chat not yet registered | EDIT-005 | needs_reconciliation | observed 2026-09-21T13:57:50Z | `feat/primitive-transform`; head observed `4180c2f98191fed082927255d57f6372d4b9425b`; PR #5 | Reconcile before any transform integration |
 
 ## Tasks
@@ -39,12 +39,12 @@ Use `blocked`, `paused`, or `needs_reconciliation` when appropriate. An expired 
 | ID | Priority | Deliverable | State | Owner | Dependency / evidence / next step |
 | --- | --- | --- | --- | --- | --- |
 | COORD-001 | P1 | Shared coordination protocol | done | chat-20260921-coordination-142684dc | Delivered on main |
-| CORE-008 | P1 | Reconcile PR #8 trusted-state corrections, PC companion migration, Phase 7 foundation | in_progress | chat-20260921T150300Z-agent3-core008 | Document identity guard + regression tests added. PR #8 reconciled with main and is ahead 16 / behind 0; diff contains only 10 CORE-008 application files. Fresh exact-head CI run `35616679777` is in progress on `a3063ec2693de6b207a1a6bbefac2f0ee26786cd`. |
-| RECON-008 | P1 | Read-only reconciliation/review of PR #8 against current main | done | chat-20260921T145300Z-agent3-recon008 | Review `5268152134` published; findings handed to active CORE-008 owner. |
+| CORE-008 | P1 | Reconcile PR #8 trusted-state corrections, PC companion migration, Phase 7 read-only inspector | review | chat-20260921T150300Z-agent3-core008 | Document identity guard + regression tests + read-only inspector UI completed. PR #8 was reconciled with main and exact-head CI run `35617304968` succeeded on head `72089b33939b9e6fd64a8a944a9a6a072457d42d`. Merge only with explicit user authorization. |
+| RECON-008 | P1 | Read-only reconciliation/review of PR #8 against current main | done | chat-20260921T145300Z-agent3-recon008 | Review `5268152134` published; findings resolved by active CORE-008 owner. |
 | REL-005 | P2 | R5 connection deadlines/recovery/status + R6 bounded pending requests | blocked | unassigned | Wait for CORE-008 integration; claim only residual gaps. R5 still lacks handshake deadline/pong watchdog/automatic recovery; R6 still lacks TTL/max in-flight cleanup for `pendingRelayIds`. |
 | BUILD-008 | P2 | Deterministic npm install/CI lockfile | review | chat-20260921T135900Z-agent1-build008 | PR #10 head `fb8712a9e222f465d086d5e9d87f14a6188b6427`; CI run `35610185239` success |
-| TEST-008 | P2 | Transport behavior tests for auth/routing/disconnect/malformed/payload bounds | blocked | unassigned | Wait for CORE-008 protocol stabilization |
-| UX-007 | P2 | Clearly mark preview and disable/hide unimplemented tools | blocked | unassigned | `src/App.tsx` currently overlaps CORE-008 |
+| TEST-008 | P2 | Transport behavior tests for auth/routing/disconnect/malformed/payload bounds | blocked | unassigned | Wait for CORE-008 protocol stabilization/integration |
+| UX-007 | P2 | Clearly mark preview and disable/hide unimplemented tools | blocked | unassigned | `src/App.tsx` currently overlaps CORE-008 until PR #8 integrates |
 | LIVE-001 | P1 | Actual iPad + live EasyEDA end-to-end validation | blocked | unassigned | Requires integrated candidate and real devices/services |
 | VIEW-001 | P2 | Documented read-only real-board viewer feasibility research | claimed | chat-20260921T141000Z-agent2-view001 | PR #9; documentation/research only |
 | OPS-001 | P2 | Deployment/runbook for Worker + Durable Object + outbound PC companion | done | chat-20260921T141500Z-agent3-ops001 | PR #11 merged as `a33f2d9ec66e993c69d1d1288bb579f83248a15b`; CI `35611613116` success; HANDOFF synchronized |
@@ -56,7 +56,7 @@ Use `blocked`, `paused`, or `needs_reconciliation` when appropriate. An expired 
 | --- | --- | --- | --- | --- |
 | BUILD-008 | chat-20260921T135900Z-agent1-build008 | `package.json`; `package-lock.json`; `.github/workflows/ci.yml` | retained through review | Integrate or explicitly abandon, synchronize HANDOFF/board, then release |
 | VIEW-001 | chat-20260921T141000Z-agent2-view001 | `docs/research/real-board-viewer.md` | retained while active | Research reaches review/done or explicit handoff |
-| CORE-008 | chat-20260921T150300Z-agent3-core008 | `companion/cloud-agent.mjs`; `companion/server.mjs`; `public/sw.js`; `src/App.tsx`; `src/lib/easyeda-pcb-component.ts`; `src/lib/easyeda-pcb-component.test.ts`; `src/lib/easyeda-safe-selection.ts`; `src/lib/easyeda-safe-selection.test.ts`; `src/lib/gateway.ts`; `worker/index.ts` | active takeover authorized by user | Integrate PR #8 or explicitly hand off, synchronize HANDOFF/board, then release |
+| CORE-008 | chat-20260921T150300Z-agent3-core008 | `companion/cloud-agent.mjs`; `companion/server.mjs`; `public/sw.js`; `src/App.tsx`; `src/lib/easyeda-pcb-component.ts`; `src/lib/easyeda-pcb-component.test.ts`; `src/lib/easyeda-safe-selection.ts`; `src/lib/easyeda-safe-selection.test.ts`; `src/lib/gateway.ts`; `worker/index.ts` | retained through review | Integrate PR #8 or explicitly hand off, synchronize HANDOFF/board, then release |
 | EDIT-005 | unknown-pr5 | Existing PR #5 transform diff | reconciliation hold | Review diff and resolve overlap before write/integration |
 
 `RECON-008` was review-only and reserved no application file. Its task branch remains a coordination checkpoint only and must not be used to modify CORE-008 code.
@@ -102,28 +102,26 @@ Use `blocked`, `paused`, or `needs_reconciliation` when appropriate. An expired 
 - reviewed PR/head: #8 / `d6d8a6213d1504d8e63e0e7b373a969711b34b1d`
 - GitHub review: `5268152134`
 - exact-head CI already present: run `35601180677` succeeded on the old base
-- current-main delta since PR merge-base: only `AGENTS.md`, `HANDOFF.md`, `WORKBOARD.md`, `docs/DEPLOYMENT_PC_COMPANION.md`; no application-code overlap observed
+- current-main delta since PR merge-base was coordination/docs only
 - confirmed R1 selection identity guard, R2 trusted-state invalidation, R3 service-worker API bypass, and R4 envelope validation are present in PR #8
-- Phase 7 component inspector is read-only and mutation APIs are absent from its tests
-- blocking correctness finding for Phase 7 UI was missing live `uuid/tabId` comparison; active CORE-008 owner has now added the identity guard and regression test on PR #8
+- initial Phase 7 blocker was missing live `uuid/tabId` comparison; this is now resolved on current PR #8 head
 - deferred REL-005 findings remain: no gateway handshake deadline/pong watchdog/automatic recovery; `pendingRelayIds` has no TTL/max in-flight cleanup while bridge stays connected
-- legacy `vps` identifiers remain compatibility names; they do not imply a VPS requirement
+- legacy `vps` wire/config identifiers remain compatibility names; visible UI now says PC companion
 - no live iPad/EasyEDA validation performed by this review
-- next: fresh exact-head CI on reconciled PR #8
 
 ## Checkpoint — CORE-008 takeover
 
 - task/chat: CORE-008 / `chat-20260921T150300Z-agent3-core008`
-- state: in_progress
-- branch/head/PR: `feat/pcb-component-inspector` / `a3063ec2693de6b207a1a6bbefac2f0ee26786cd` / #8
+- state: review
+- branch/head/PR: `feat/pcb-component-inspector` / `72089b33939b9e6fd64a8a944a9a6a072457d42d` / #8
 - takeover reason: prior agent lost connection; user explicitly authorized this chat to continue PR #8
-- reservations: all existing CORE-008 paths transferred from `unknown-pr8`
 - correction completed: trusted document identity (`documentType + uuid + tabId`) is validated before selection/component lookup, with same-primitive-ID document-switch regression coverage
-- main reconciliation: merge commit `a3063ec2693de6b207a1a6bbefac2f0ee26786cd`; branch now ahead 16 / behind 0
-- PR diff after reconciliation: only 10 CORE-008 application files; coordination/docs are inherited from main and not in PR diff
-- fresh exact-head CI: run `35616679777` in progress
+- UI completed: read-only selected PCB/footprint component inspector showing designator, name, primitive ID, X/Y, rotation, layer, lock state, and capture time; visible cloud terminology updated to PC companion
+- protocol compatibility: legacy `VPS_TOKEN`, `EASYEDA_VPS_TOKEN`, `/ws/vps`, `vpsConnected`, and `companion/cloud-agent.mjs` remain intentionally unchanged
+- final compare before board checkpoint: branch ahead 18 / behind 0; PR diff contained only the 10 CORE-008 application files
+- final exact-head CI: run `35617304968` succeeded on `72089b33939b9e6fd64a8a944a9a6a072457d42d`
 - live tested: no
-- remaining: inspect fresh CI; if green, update PR/board to review and seek explicit merge authorization
+- remaining: explicit user merge authorization; immediately before merge, refresh main/board and reconcile any coordination-only drift without overwriting canonical WORKBOARD
 
 ## Integration rules
 
@@ -152,5 +150,7 @@ Use `blocked`, `paused`, or `needs_reconciliation` when appropriate. An expired 
 - 2026-09-21T14:57:00Z — Published PR #8 review `5268152134`; recorded Phase 7 document-identity correctness gap and completed RECON-008 without modifying CORE-008 code paths.
 - 2026-09-21T15:03:00Z — User reported the prior PR #8 agent disconnected and explicitly authorized Agent 3 to take over CORE-008; ownership and reservations transferred to `chat-20260921T150300Z-agent3-core008`.
 - 2026-09-21T15:05:00Z — Added Phase 7 trusted document identity guard and regression tests to PR #8.
-- 2026-09-21T15:07:00Z — Reconciled PR #8 with current main; branch became ahead 16 / behind 0 with only CORE-008 application files remaining in PR diff.
-- 2026-09-21T15:09:00Z — Fresh exact-head CI run `35616679777` observed in progress on `a3063ec2693de6b207a1a6bbefac2f0ee26786cd`.
+- 2026-09-21T15:07:00Z — Reconciled PR #8 with current main and removed coordination/docs from PR diff.
+- 2026-09-21T15:12:00Z — Added the read-only Phase 7 component inspector UI and visible PC companion terminology.
+- 2026-09-21T15:13:00Z — Exact-head CI run `35617304968` succeeded on `72089b33939b9e6fd64a8a944a9a6a072457d42d`.
+- 2026-09-21T15:14:00Z — CORE-008 moved to review/merge-ready; awaiting explicit user merge authorization.

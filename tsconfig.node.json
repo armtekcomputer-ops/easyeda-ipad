@@ -2,9 +2,9 @@
   "compilerOptions": {
     "composite": true,
     "skipLibCheck": true,
+    "target": "ES2022",
     "module": "ESNext",
-    "moduleResolution": "Bundler",
-    "allowImportingTsExtensions": true
+    "moduleResolution": "Bundler"
   },
   "include": ["vite.config.ts"]
 }

@@ -1,13 +1,14 @@
 {
   "name": "easyeda-ipad",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 0.0.0.0",
     "typecheck": "tsc -b --pretty false",
+    "test": "vitest run",
     "companion": "node companion/server.mjs",
     "cloud-agent": "node companion/cloud-agent.mjs",
     "worker:types": "wrangler types",
@@ -26,6 +27,7 @@
     "@types/react": "^19.1.10",
     "@types/react-dom": "^19.1.7",
     "typescript": "^5.9.2",
+    "vitest": "^3.2.4",
     "wrangler": "^4.135.0"
   }
 }

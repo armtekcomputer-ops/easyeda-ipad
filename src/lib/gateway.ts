@@ -105,7 +105,7 @@ export class EasyEdaGatewayClient extends EventTarget {
   private outstandingPingId: string | null = null;
   private targetUrl: string | null = null;
   private reconnectEnabled = false;
-  private reconnectDelayMs = GATEWAY_RELIABILITY.reconnectInitialMs;
+  private reconnectDelayMs: number = GATEWAY_RELIABILITY.reconnectInitialMs;
 
   get state(): GatewayState {
     return this.stateValue;

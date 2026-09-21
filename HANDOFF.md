@@ -49,7 +49,7 @@ EasyEDA Pro on VPS
 
 Replace the demo-only workspace behavior with real EasyEDA Pro API-backed operations.
 
-The browser must never receive arbitrary privileged EasyEDA internals directly. The existing `gateway.execute(code)` transport remains the execution path, but PWA code should call a small typed command layer that emits narrowly-scoped EasyEDA API snippets.
+The browser must never receive arbitrary privileged EasyEDA internals directly. The existing `gateway.execute(code)` transport remains the execution path, but PWA code calls a typed command layer that emits narrowly-scoped EasyEDA API snippets.
 
 ## Verified official EasyEDA API surface
 
@@ -69,92 +69,73 @@ Verified `EDMT_EditorDocumentType` values needed for first integration:
 - `SCHEMATIC_PAGE = 1`
 - `PCB = 3`
 - `FOOTPRINT = 4`
-- other enum values exist; unknown/unhandled values must remain numeric rather than being guessed
+- other enum values exist; unknown/unhandled values remain numeric
 
 ### PCB document metadata
 
-- `eda.dmt_Pcb.getCurrentPcbInfo()`
-  - returns `IDMT_PcbItem | undefined`
+- `eda.dmt_Pcb.getCurrentPcbInfo()` -> `IDMT_PcbItem | undefined`
+- verified fields used by our normalizer: `uuid`, `name`, `parentProjectUuid`, optional `parentBoardName`
 
 ### Schematic document metadata
 
 - `eda.dmt_Schematic.getCurrentSchematicInfo()`
 - `eda.dmt_Schematic.getCurrentSchematicPageInfo()`
-- `eda.dmt_Schematic.getCurrentSchematicAllSchematicPagesInfo()`
-  - all marked BETA in current reference
+- verified schematic fields used: `uuid`, `name`, `parentProjectUuid`, optional `parentBoardName`
+- verified page fields used: `uuid`, `name`, `parentSchematicUuid`
 
-### Selection — PCB
+### Selection — PCB / footprint
 
-Namespace verified as `eda.pcb_SelectControl`.
+Namespace: `eda.pcb_SelectControl`.
 
-Read APIs:
+Read APIs used:
 
-- `getAllSelectedPrimitives_PrimitiveId(): Promise<Array<string>>`
-- `getAllSelectedPrimitives(): Promise<Array<IPCB_Primitive>>`
-- `getCurrentMousePosition(): Promise<{x:number,y:number} | undefined>`
+- `getAllSelectedPrimitives_PrimitiveId()`
+- `getAllSelectedPrimitives()`
 
-Write/selection-control APIs verified but NOT enabled in first read-only milestone:
-
-- `clearSelected()`
-- `doSelectPrimitives(primitiveIds)`
-- `doCrossProbeSelect(...)`
+Verified write APIs exist (`clearSelected`, `doSelectPrimitives`, `doCrossProbeSelect`) but remain disabled in this milestone.
 
 ### Selection — schematic
 
-Namespace verified as `eda.sch_SelectControl`.
+Namespace: `eda.sch_SelectControl`.
 
-Read APIs:
+Read APIs used:
 
-- `getAllSelectedPrimitives_PrimitiveId(): Promise<Array<string>>`
-- `getAllSelectedPrimitives(): Promise<Array<ISCH_Primitive>>`
-- `getCurrentMousePosition(): Promise<{x:number,y:number} | undefined>`
+- `getAllSelectedPrimitives_PrimitiveId()`
+- `getAllSelectedPrimitives()`
 
-Write/selection-control APIs verified but NOT enabled in first read-only milestone:
-
-- `clearSelected()`
-- `doSelectPrimitives(primitiveIds)`
-- `doCrossProbeSelect(...)`
+Verified write APIs exist but remain disabled.
 
 ### Primitive/property access
 
-Schematic:
-
-- `eda.sch_Primitive.getPrimitiveByPrimitiveId(id)` returns `ISCH_Primitive | undefined`
-- `eda.sch_Primitive.getPrimitiveTypeByPrimitiveId(id)` is BETA
-- `eda.sch_Primitive.getPrimitivesBBox(...)` is BETA
-
-PCB:
-
-- `eda.pcb_Primitive.getPrimitivesBBox(...)` is verified
-- the current `PCB_Primitive` class reference does not expose a generic `getPrimitiveByPrimitiveId`; use selected primitive objects from `pcb_SelectControl.getAllSelectedPrimitives()` for the first milestone rather than inventing a getter
-
-### Editor controls verified for later work
-
-`eda.dmt_EditorControl` exposes documented operations including `activateDocument`, `openDocument`, zoom/fit helpers, and split-screen management. These are not needed for the first read-only snapshot.
+- Schematic generic getter exists: `eda.sch_Primitive.getPrimitiveByPrimitiveId(id)`.
+- PCB `PCB_Primitive` current reference does not expose a generic equivalent, so the first milestone uses selected primitive objects returned by `pcb_SelectControl`.
 
 ### Undo / redo status
 
-No public undo/redo method was found in the current official API-skill references/search. Search for `undo` only found unrelated document-log wording; search for `redo` returned no API. Therefore **do not implement undo/redo yet**.
+No public undo/redo API was found in the current official API-skill reference. Do not implement or guess it.
 
-## Phase 3 deliverables
+## Phase 3 implementation completed on current branch
 
-- [x] Research official EasyEDA Pro API names and supported operations from official SDK/skill repositories.
-- [ ] Create `src/lib/easyeda-api.ts` typed command layer.
-- [ ] Implement read-only document snapshot command first:
-  - current document/editor type
-  - current project/document identifiers where available
-  - current PCB or schematic metadata where applicable
-  - selected primitive IDs and a bounded/normalized selected primitive summary
-- [ ] Add a PWA `Refresh from EasyEDA` action and state panel.
-- [ ] Implement selection synchronization only after first snapshot integration is stable.
-- [ ] Map safe editing commands incrementally:
-  - selection APIs are verified but remain disabled initially
-  - move/rotate/property updates require exact class-specific APIs to be researched before implementation
-  - wire/route only after exact API support is verified
-  - undo/redo blocked until public APIs are found
-- [ ] Add unit/shape validation around messages returned by EasyEDA.
-- [ ] Add CI tests for command generation that do not require a live EasyEDA instance.
-- [ ] Update README/HANDOFF and open PR only after the first read-only integration is green.
+- [x] Research official EasyEDA API names and supported operations.
+- [x] Add `src/lib/easyeda-api.ts` typed read-only command layer.
+- [x] Add `EasyEdaApi.getSnapshot()` using only verified read APIs.
+- [x] Normalize current document, project, PCB/schematic metadata, selected IDs, and selected primitive summaries.
+- [x] Cap selected IDs at 100 and primitive summaries at 20.
+- [x] Limit primitive summaries to shallow scalar fields only, max 16 fields and 256 characters per string.
+- [x] Validate every returned snapshot in the browser before rendering.
+- [x] Add Vitest command-generation/validation tests.
+- [x] Add `npm test` to CI.
+- [ ] Wire snapshot refresh/state into the PWA UI.
+- [ ] Run CI on a PR and fix failures.
+- [ ] Update README and merge first read-only integration when green.
+
+## Files changed in Phase 3 so far
+
+- `HANDOFF.md`
+- `src/lib/easyeda-api.ts`
+- `src/lib/easyeda-api.test.ts`
+- `package.json` (version `0.3.0`, Vitest/test script)
+- `.github/workflows/ci.yml` (runs tests before build)
 
 ## Safety / correctness rules
 
@@ -176,4 +157,4 @@ At each meaningful milestone:
 
 ## Next action
 
-Create `src/lib/easyeda-api.ts` with a typed, read-only `getSnapshot()` command generator/executor. It must use only the verified methods above, normalize the result, cap selected primitive summaries, validate the returned shape in the browser, and add tests for generated code/validation before wiring it into the UI.
+Re-read this HANDOFF, then update the PWA to instantiate `EasyEdaApi` over the existing gateway, add a `Refresh from EasyEDA` action available only when connected, show document/project/context/selection snapshot status in the inspector, and surface validation/API errors without exposing secrets or raw execute code.

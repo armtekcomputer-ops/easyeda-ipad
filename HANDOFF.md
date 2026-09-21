@@ -64,6 +64,7 @@ EasyEDA Pro on VPS
 - VPS initiates outbound WSS to Cloudflare; Cloudflare never needs inbound access to the VPS local bridge.
 - Default session ID: `default`.
 - Wrangler config uses the 2026 declarative Durable Object `exports` model with SQLite storage.
+- PWA Cloud mode builds a same-origin `/ws/ipad` WSS URL at runtime; the iPad token is entered by the user and stored only in `sessionStorage`.
 
 ## Phase 2 deliverables
 
@@ -82,23 +83,29 @@ EasyEDA Pro on VPS
   - forward relay/VPS status events
   - enforce payload size limit
   - preserve client routing across hibernation using WebSocket attachments and self-contained relay IDs
-- [ ] Add `companion/cloud-agent.mjs`:
+- [x] Add `companion/cloud-agent.mjs`:
   - scan `127.0.0.1:49620-49629`
   - connect outbound to Cloudflare `/ws/vps`
   - relay execute/result/error
-  - reconnect with backoff
-- [ ] Update PWA defaults/settings for Cloudflare hosted mode.
-- [ ] Add npm scripts for Worker dev/deploy and cloud agent.
+  - reconnect both local bridge and cloud with backoff
+  - report EasyEDA connection status to iPad clients
+- [x] Update PWA defaults/settings for Cloudflare hosted mode while retaining Direct/LAN fallback.
+- [x] Add npm scripts for Worker type generation/dev/deploy and cloud agent.
 - [ ] Update README with VPS + Cloudflare deployment steps and secrets.
 - [ ] Extend CI to generate/check Worker types, typecheck Worker, and syntax-check cloud agent.
 - [ ] Open PR, run CI, fix failures, merge when green.
 
-## Files added in current branch
+## Files added or changed in current branch
 
+- `HANDOFF.md`
 - `wrangler.jsonc`
 - `worker/tsconfig.json`
 - `worker/index.ts`
-- `HANDOFF.md`
+- `companion/cloud-agent.mjs`
+- `package.json`
+- `src/App.tsx`
+- `src/lib/gateway.ts`
+- `src/styles.css`
 
 ## Security requirements
 
@@ -110,6 +117,10 @@ EasyEDA Pro on VPS
 - Worker should not log tokens or execute payload contents.
 - Prefer `wss://` in production.
 
+## Known implementation note
+
+A temporary stylesheet overwrite regression occurred during this milestone and was immediately corrected by restoring the full stylesheet from `main` and reapplying only the Cloud connection control styles.
+
 ## Loop rule
 
 At each meaningful milestone:
@@ -120,4 +131,4 @@ At each meaningful milestone:
 
 ## Next action
 
-Implement `companion/cloud-agent.mjs` for VPS outbound WSS relay to Cloudflare.
+Update deployment documentation and CI, then open a PR and use GitHub Actions to validate the Worker configuration/types and both companion modes.

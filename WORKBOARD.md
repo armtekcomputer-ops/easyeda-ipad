@@ -177,3 +177,13 @@ CORE-008 and OPS-001 reservations remain released.
 - 2026-09-21T16:08:00Z — PR #14 opened as draft; implementation touched only `src/styles.css`.
 - 2026-09-21T16:10:00Z — Exact-head CI `35623710644` succeeded on `565c19372ea60770a6d6ab620845e7a34213c2ec`.
 - 2026-09-21T16:11:00Z — UX-007 moved to review; `src/App.tsx` released, `src/styles.css` retained through review.
+
+## COORD-002 current reconciliation
+
+- Owner/run: `chatgpt-auto-easyeda-20260921T180639Z`; owner family: `chatgpt-auto-easyeda`.
+- State: claimed; source issue: #17.
+- Reserved exact paths: `HANDOFF.md`; `WORKBOARD.md` coordination updates only. Preserve unrelated owners and records.
+- Branch: `work/COORD-002/chatgpt-auto-easyeda-20260921T180639Z` (to create).
+- Scope: reconcile verified merged PRs #9/#10/#13/#14/#15 and superseded #5; record open EDIT-006 #19 and pending LIVE-001 #18. No application code.
+- Existing reservations remain held until main HANDOFF is synchronized and a fresh board update explicitly releases them.
+- Next: prepare HANDOFF correction on task branch and open a draft PR; keep WORKBOARD updates on remote main only.

@@ -14,10 +14,11 @@ Last updated: 2026-09-21 (Asia/Bangkok)
 - Phase 6 PR #7 merged as `a6941a74093dddf54fb1848293c17d4273d532a4`
 - OPS-001 PR #11 merged as `a33f2d9ec66e993c69d1d1288bb579f83248a15b`
 - CORE-008 PR #8 merged as `45f3c607c274e8ccfa93e5687db489d57db1c31a`
-- Final PR #8 pre-merge head: `6269d83f4612ac0e00061ea3db1c1f304ef23b10`
-- Final PR #8 exact-head CI run `35618277426` succeeded
+- REL-005 PR #12 merged as `319d83c518fe1bf166b0e5339bea331d9bd0eb90`
+- Final PR #12 pre-merge head: `e6bc586e84c1b03fcdbac1f1e6d7630ee48cdb24`
+- Final PR #12 exact-head CI run `35621474276` succeeded
 
-## Accepted architecture — now implemented on main
+## Accepted architecture — implemented on main
 
 ```text
 iPad PWA
@@ -41,7 +42,7 @@ Official EasyEDA API Gateway / bridge
 
 Cloudflare resources required by this path are Worker, Static Assets, Durable Objects, and Worker secrets. No VPS, Cloudflare Container, D1, KV, R2, or Queue is required.
 
-Legacy internal wire/config identifiers such as `VPS_TOKEN`, `EASYEDA_VPS_TOKEN`, `/ws/vps`, `vpsConnected`, and `companion/cloud-agent.mjs` remain compatibility names only. Visible product terminology now uses **PC companion**.
+Legacy internal wire/config identifiers such as `VPS_TOKEN`, `EASYEDA_VPS_TOKEN`, `/ws/vps`, `vpsConnected`, and `companion/cloud-agent.mjs` remain compatibility names only. Visible product terminology uses **PC companion**.
 
 ## Merged capabilities
 
@@ -61,7 +62,7 @@ Legacy internal wire/config identifiers such as `VPS_TOKEN`, `EASYEDA_VPS_TOKEN`
 
 - Selection clear/re-apply using verified PCB/SCH APIs.
 - UI reuses validated primitive IDs rather than arbitrary typed IDs.
-- Selection writes now require the same validated document type, UUID, and tab ID that produced the trusted snapshot.
+- Selection writes require the same validated document type, UUID, and tab ID that produced the trusted snapshot.
 - Trusted state is invalidated before uncertain writes and restored only after successful read-back.
 
 ### Phase 5
@@ -103,27 +104,47 @@ Merged selected PCB/footprint component inspector:
 
 `pcb_PrimitiveComponent.get()` is documented as BETA, so this capability remains read-only.
 
+### REL-005 — transport reliability
+
+PR #12 is merged on `main`.
+
+Merged R5 reliability:
+
+- browser gateway handshake deadline: 8 seconds;
+- browser heartbeat every 15 seconds with a 10-second pong watchdog;
+- bounded automatic reconnect backoff from 1 second up to 15 seconds;
+- manual disconnect cancels retries;
+- connection loss rejects pending browser requests and resets status before reconnect;
+- cloud companion has a 5-second relay handshake deadline and its own heartbeat/pong watchdog;
+- Worker retains the live companion `edaConnected` and `localBridgePort` status in the Durable Object WebSocket attachment;
+- newly/reconnected iPad clients immediately receive current relay/EasyEDA status instead of waiting for the next companion status event;
+- session status API reports the retained EasyEDA bridge state.
+
+Merged R6 pending-request hardening:
+
+- maximum 64 in-flight relay requests on the cloud companion;
+- 35-second request TTL;
+- duplicate in-flight request IDs rejected;
+- local/cloud generation checks prevent stale replies from consuming requests belonging to a newer connection generation;
+- pending requests are drained on local bridge/cloud disconnect and shutdown;
+- focused regression coverage verifies bounds, TTL expiry, generation safety, reconnect/watchdog behavior, and status recovery.
+
+Final exact-head CI for PR #12 was `35621474276` on `e6bc586e84c1b03fcdbac1f1e6d7630ee48cdb24` and succeeded. CI is not live-device validation.
+
 ## Remaining work
 
-### REL-005 — now unblocked
+### TEST-008 — ready to claim
 
-Residual transport reliability work after CORE-008:
-
-- R5: handshake deadline, pong watchdog, bounded reconnect/recovery, and status restoration.
-- R6: TTL/max-in-flight/generation-safe cleanup for pending relay requests.
-
-### TEST-008 — now unblocked
-
-Add transport behavior tests for:
+Add broader transport behavior tests for:
 
 - auth;
 - routing;
 - disconnect handling;
 - malformed frames;
 - payload bounds;
-- timeout/recovery behavior after REL-005 stabilizes the protocol.
+- protocol behavior across the now-merged REL-005 reconnect/timeout paths.
 
-### UX-007 — now unblocked
+### UX-007 — ready to claim
 
 Clarify that the local canvas is a preview/control surface rather than a complete live EasyEDA editor. Disable or hide unimplemented tools that could imply unsupported editing.
 
@@ -156,17 +177,16 @@ Actual iPad + EasyEDA Pro/API Gateway end-to-end validation is still pending. CI
 
 `docs/DEPLOYMENT_PC_COMPANION.md` is merged and documents Worker + Durable Object + outbound PC companion deployment/rollback.
 
-PR #8 implementation is now also merged, so the documented PC-companion architecture and the main application behavior are aligned. This still does not prove a production deployment or live iPad/EasyEDA validation.
+The PC-companion architecture, CORE-008 implementation, and REL-005 reliability hardening are now merged on `main`. This still does not prove a production deployment or live iPad/EasyEDA validation.
 
 ## Next actions
 
-1. Claim and implement REL-005 without duplicating already-merged R1–R4 work.
-2. Add TEST-008 after/with protocol stabilization.
-3. Claim UX-007 now that `src/App.tsx` is no longer reserved by CORE-008.
-4. Integrate BUILD-008 / PR #10 only under explicit merge authorization.
-5. Complete VIEW-001 research independently.
-6. Perform LIVE-001 against the integrated main candidate and record real iPad/EasyEDA versions/results.
-7. Keep PR #5 mutation work separate until explicitly reviewed.
+1. Claim TEST-008 against the merged REL-005 protocol.
+2. Claim UX-007 independently; `src/App.tsx` is available.
+3. Integrate BUILD-008 / PR #10 only under explicit merge authorization.
+4. Complete VIEW-001 research independently.
+5. Perform LIVE-001 against the integrated main candidate and record real iPad/EasyEDA versions/results.
+6. Keep PR #5 mutation work separate until explicitly reviewed.
 
 ## Completion rules
 

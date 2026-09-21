@@ -5,12 +5,12 @@ Last updated: 2026-09-21 (Asia/Bangkok)
 ## Project source of truth
 
 Repository: `armtekcomputer-ops/easyeda-ipad`
-Branch in progress: `feat/current-project-documents`
 Base: `main`
-Current branch version: `0.6.0`
-Phase 5 PR: `#6` merged
-Phase 5 merge commit: `54b480c9158d5e8cbfe1c18ec320f011fd006abd`
-Phase 6 PR: `#7` open
+Current completed version: `0.6.0`
+Phase 6 PR: `#7` merged
+Phase 6 merge commit: `a6941a74093dddf54fb1848293c17d4273d532a4`
+Phase 6 final head: `fee123c1d74d5807cf70734840eec571fb72b9d7`
+Phase 6 final CI: run `35598740884` — success
 
 This file is the operational handoff. Continue work from this file first, not from chat memory.
 
@@ -35,7 +35,7 @@ EasyEDA bridge 127.0.0.1:49620-49629
 EasyEDA Pro on VPS
 ```
 
-## Completed capabilities through Phase 5
+## Completed capabilities
 
 ### Phase 1–2 — transport and iPad shell
 
@@ -49,152 +49,102 @@ EasyEDA Pro on VPS
 - Typed `EasyEdaApi` command layer.
 - Current document/project/PCB/schematic/selection snapshot.
 - Browser-side schema validation and bounded primitive summaries.
-- `Refresh from EasyEDA` UI.
 
 ### Phase 4 — selection synchronization
 
 - Clear and re-apply selection using only verified PCB/SCH APIs.
-- Maximum 100 validated primitive IDs, max 256 characters each.
-- UI cannot type arbitrary primitive IDs; it only reuses IDs read from validated EasyEDA state.
-- Successful mutations read back a fresh EasyEDA snapshot.
+- UI cannot type arbitrary primitive IDs; it reuses validated IDs read from EasyEDA.
+- Successful mutations read back a fresh snapshot.
 
 ### Phase 5 — validated editor navigation
 
-Merged in PR #6 as `54b480c9158d5e8cbfe1c18ec320f011fd006abd` after exact-head CI run `35597501079` succeeded.
-
-Implemented:
-
 - Read validated open-tab/split-screen state.
-- Identify the current active EasyEDA tab.
 - Activate another already-open validated tab.
-- Fit all primitives in EasyEDA.
-- Fit the current selection in EasyEDA.
-- Refresh editor/document state after tab activation.
+- Fit all primitives or the current selection.
+- Refresh trusted editor/document state after activation.
+- Merged in PR #6.
 
-## Phase 6 — current-project document browser
+### Phase 6 — current-project document browser
 
-Goal: let the iPad open schematic pages and PCBs from the **already-current project** even when those documents are not already open as editor tabs.
-
-This phase intentionally does **not** expose project switching. The official `eda.dmt_Project.openProject()` documentation warns that opening another project can directly lose unsaved changes in the previously open project.
-
-### Verified official APIs/contracts
-
-Data source:
-
-- `eda.dmt_Project.getCurrentProjectInfo(): Promise<IDMT_ProjectItem | undefined>`
-- `IDMT_ProjectItem.data`
-- `IDMT_SchematicItem.page[]`
-- `IDMT_SchematicPageItem.uuid`
-- `IDMT_PcbItem.uuid`
-- `IDMT_BoardItem.schematic`
-- `IDMT_BoardItem.pcb`
-
-Open/focus:
-
-- `eda.dmt_EditorControl.openDocument(documentUuid: string, splitScreenId?: string): Promise<string | undefined>`
-- `eda.dmt_EditorControl.activateDocument(tabId: string): Promise<boolean>`
-
-Phase 6 calls `openDocument(documentUuid)` without a guessed split-screen ID. The returned validated tab ID is passed through the existing editor navigation layer so the requested document becomes active, then trusted state is read back.
-
-### Implemented Phase 6 command layer
-
-File:
-
-```text
-src/lib/easyeda-project-documents.ts
-```
+Merged in PR #7 as `a6941a74093dddf54fb1848293c17d4273d532a4` after exact-head CI run `35598740884` succeeded.
 
 Implemented:
 
-- bounded current-project document state
-- top-level PCB collection
-- top-level schematic-page collection
-- Board-contained PCB and schematic-page collection
-- only `pcb` and `schematic-page` targets are exposed
-- maximum 128 documents
-- UUID length max 256
-- document/project display name max 128
-- duplicate document UUID rejection
-- strict browser-side result type validation; malformed numeric/object UUID/tab IDs are rejected rather than coerced
-- `openCurrentProjectDocument(uuid)` re-reads the current project inside the same execute command
-- requested UUID must still be in that bounded current-project list before `openDocument` is called
-- UUID source is validated and JSON-serialized
-- no `openProject`, `closeDocument`, save, split-screen mutation, or geometry/property mutation API is called
+- bounded current-project schematic-page/PCB discovery
+- top-level and Board-contained document discovery
+- no arbitrary document UUID input
+- membership revalidation immediately before `openDocument`
+- `openDocument(documentUuid)` without guessed split-screen ID
+- activation of the returned validated tab
+- editor/snapshot/project-document read-back before local state is trusted
+- strict rejection of malformed response types
+- maximum 128 documents, UUID max 256 chars, names max 128 chars
+- version `0.6.0`
 
-Tests:
+Project switching remains intentionally disabled because official `openProject()` documentation warns that unsaved changes in the previously open project can be lost.
 
-```text
-src/lib/easyeda-project-documents.test.ts
-```
+## Phase 7 target — selected PCB component inspector
 
-Coverage includes command API names, absence of unsafe APIs, JSON serialization, UUID bounds, document-count bounds, duplicate rejection, malformed result types, stale document rejection, and successful validated tab-ID return.
+Goal: make the iPad inspector useful for real PCB editing workflows without introducing geometry mutation yet.
 
-### Implemented Phase 6 iPad UI
+Phase 7 is read-only. It will inspect exactly one currently selected PCB/footprint **component/device** and expose a bounded validated component state such as:
 
-`src/App.tsx` now:
+- primitive ID
+- designator
+- name
+- X coordinate
+- Y coordinate
+- rotation
+- locked state
+- layer as a bounded scalar display value when safely representable
 
-- loads document snapshot, editor state, and current-project documents together on Refresh
-- clears mixed local state if the comprehensive refresh fails
-- provides a Current Project Documents selector built only from validated state
-- has no free-form document UUID input
-- validates selector membership again before issuing the open request
-- after `openDocument`, activates the returned validated tab
-- reads back fresh editor state, EasyEDA snapshot, and current-project documents before committing trusted local state
-- clears potentially stale local state when the document was opened but follow-up activation/read-back fails
-- refreshes current-project documents when a normal editor tab activation can change project context
-- prevents selection/editor/project-document operations from running concurrently
+### Verified official APIs
 
-`src/styles.css` includes touch-friendly styling for the validated document/tab selectors.
+Selection/document guard:
 
-### Phase 6 CI history
+- `eda.dmt_SelectControl.getCurrentDocumentInfo()`
+- `eda.pcb_SelectControl.getAllSelectedPrimitives_PrimitiveId()`
 
-API/test foundation head `79412aa518743f740c7509b5d859f95140d326da`:
+Component lookup:
 
-- CI run `35597890356` — success
+- `eda.pcb_PrimitiveComponent.get(primitiveId): Promise<IPCB_PrimitiveComponent | undefined>`
 
-Strict result parser/test head `1b08dc046b22573fefdf724f6d74fd1bd5a0d231`:
+Component state getters on `IPCB_PrimitiveComponent`:
 
-- CI run `35598136586` — success
-- tests, PWA build, Worker typecheck, Wrangler validation, direct companion syntax, and VPS agent syntax all passed
+- `getState_PrimitiveId(): string`
+- `getState_Designator(): string | undefined`
+- `getState_Name(): string | undefined`
+- `getState_X(): number`
+- `getState_Y(): number`
+- `getState_Rotation(): number`
+- `getState_PrimitiveLock(): boolean`
+- `getState_Layer(): TPCB_LayersOfComponent`
 
-UI head `355d20c710be0c2ef774e29710c748ae6c418f07`:
+Important: `pcb_PrimitiveComponent.get()` is documented as a **BETA** API. Phase 7 therefore remains read-only. The documented BETA `modify(...)` API must not be introduced in this phase.
 
-- CI run `35598385763` — success
-- tests, PWA build, Worker typecheck, Wrangler validation, direct companion syntax, and VPS agent syntax all passed
+### Phase 7 safety design
 
-Documentation/style/version commits were added after that UI CI run, so the exact latest head still requires a final green CI run before merge.
+- Only PCB (`documentType = 3`) and footprint (`documentType = 4`) contexts are accepted.
+- UI supplies only a primitive ID already present in the latest validated EasyEDA selection snapshot.
+- Command re-reads current document type and current selected IDs before component lookup.
+- Exactly one selected ID is required.
+- Selected ID must equal the expected validated ID supplied by the browser.
+- If lookup returns `undefined`, treat the selected primitive as not a component; do not guess another primitive class.
+- Read only scalar getters needed for the inspector.
+- Bound strings and reject non-finite numeric coordinates/rotation.
+- No `modify`, `setState_*`, `done`, delete, create, save, route, or geometry mutation API.
 
-## Phase 6 status
+## Phase 7 status
 
-- [x] Phase 5 merged and final CI verified.
-- [x] Create Phase 6 branch `feat/current-project-documents`.
-- [x] Research current-project tree contracts.
-- [x] Verify schematic-page and PCB UUID contracts.
-- [x] Verify `openDocument(documentUuid, splitScreenId?)`.
-- [x] Explicitly reject `openProject()` for this phase due documented unsaved-data-loss risk.
-- [x] Add bounded current-project document parser/API.
-- [x] Add validated `openCurrentProjectDocument(uuid)` command with in-command membership revalidation.
-- [x] Add tests before UI integration.
-- [x] Harden result parser to reject malformed types and re-run CI.
-- [x] Add iPad Current Project Documents UI only after API/tests were green.
-- [x] Add selector styling.
-- [x] Update README for Phase 6.
-- [x] Bump package version to `0.6.0`.
-- [x] Update this HANDOFF.
-- [ ] Verify CI on the exact latest Phase 6 head.
-- [ ] Confirm PR #7 is mergeable on that exact head.
-- [ ] Merge PR #7 only after final green CI.
-- [ ] After merge, update `main` HANDOFF and start the next narrow capability on a new branch.
-
-## Phase 6 files changed
-
-- `HANDOFF.md`
-- `README.md`
-- `package.json`
-- `src/App.tsx`
-- `src/styles.css`
-- `src/lib/easyeda-project-documents.ts`
-- `src/lib/easyeda-project-documents.test.ts`
+- [x] Phase 6 merged and final exact-head CI verified.
+- [x] Verify `PCB_PrimitiveComponent.get()` and scalar component getters.
+- [x] Confirm `modify(...)` exists but is BETA and explicitly exclude it from Phase 7.
+- [ ] Create Phase 7 branch from current `main`.
+- [ ] Add bounded selected-component inspector command/parser.
+- [ ] Add tests proving only read APIs are called and mutation APIs are absent.
+- [ ] Run CI before UI integration.
+- [ ] Add iPad component inspector UI only after API/tests are green.
+- [ ] Update README/version/HANDOFF, final CI, merge.
 
 ## Safety / correctness rules carried forward
 
@@ -202,10 +152,10 @@ Documentation/style/version commits were added after that UI CI run, so the exac
 - Never guess method names or argument shapes.
 - No secrets or gateway URLs in generated EasyEDA code.
 - Treat all EasyEDA response values as untrusted until browser-side validation succeeds.
-- Never accept arbitrary IDs/UUIDs for write/navigation actions when a validated source list exists.
-- Revalidate mutation targets inside the command immediately before a mutation where practical.
+- Never accept arbitrary IDs/UUIDs for navigation or future write actions when a validated source list exists.
+- Revalidate command targets against live EasyEDA state immediately before acting where practical.
 - Never assume a write/navigation succeeded locally when documented read-back is available.
-- Keep each phase narrowly scoped; do not combine unrelated mutation families into one PR.
+- Do not promote documented BETA mutation APIs into production-like UI without a separate explicitly scoped phase and stronger safeguards.
 
 ## Loop rule
 
@@ -217,4 +167,4 @@ At each meaningful milestone:
 
 ## Next action
 
-Identify the exact latest PR #7 head after style/README/version/HANDOFF updates, verify its GitHub Actions CI run is `success`, confirm PR #7 is mergeable, then merge. After merge, update HANDOFF on `main` before choosing the next capability.
+Create `feat/pcb-component-inspector` from current `main`, add a strictly read-only selected-component API/parser/tests, run CI, then integrate the inspector UI only if that exact API/test head is green.
